@@ -21,16 +21,30 @@ class PrivacySettings @Inject constructor(
     private val targetLanguageKey = stringPreferencesKey("target_language")
     private val translationModeKey = stringPreferencesKey("translation_mode")
     private val advancedSpeakerModeKey = booleanPreferencesKey("advanced_speaker_mode")
+    private val expectedSpeakersKey = intPreferencesKey("expected_speakers")
 
-    val strictOffline: Flow<Boolean> = context.dataStore.data.map { it[strictOfflineKey] ?: true }
-    val saveTranscript: Flow<Boolean> = context.dataStore.data.map { it[saveTranscriptKey] ?: true }
-    val targetLanguage: Flow<String> = context.dataStore.data.map { it[targetLanguageKey] ?: "pt" }
+    val strictOffline: Flow<Boolean> =
+        context.dataStore.data.map { it[strictOfflineKey] ?: true }
+
+    val saveTranscript: Flow<Boolean> =
+        context.dataStore.data.map { it[saveTranscriptKey] ?: true }
+
+    val targetLanguage: Flow<String> =
+        context.dataStore.data.map { it[targetLanguageKey] ?: "pt" }
+
     val advancedSpeakerMode: Flow<Boolean> =
         context.dataStore.data.map { it[advancedSpeakerModeKey] ?: false }
 
+    val expectedSpeakers: Flow<Int> =
+        context.dataStore.data.map {
+            (it[expectedSpeakersKey] ?: 0).takeIf { value -> value in 0..4 } ?: 0
+        }
+
     val translationMode: Flow<TranslationMode> = context.dataStore.data.map {
         runCatching {
-            TranslationMode.valueOf(it[translationModeKey] ?: TranslationMode.AUTO_PT_EN.name)
+            TranslationMode.valueOf(
+                it[translationModeKey] ?: TranslationMode.AUTO_PT_EN.name
+            )
         }.getOrDefault(TranslationMode.AUTO_PT_EN)
     }
 
@@ -52,5 +66,11 @@ class PrivacySettings @Inject constructor(
 
     suspend fun setAdvancedSpeakerMode(value: Boolean) {
         context.dataStore.edit { it[advancedSpeakerModeKey] = value }
+    }
+
+    suspend fun setExpectedSpeakers(value: Int) {
+        context.dataStore.edit {
+            it[expectedSpeakersKey] = value.takeIf { count -> count in 0..4 } ?: 0
+        }
     }
 }
