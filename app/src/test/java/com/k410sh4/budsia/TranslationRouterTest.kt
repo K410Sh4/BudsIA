@@ -23,11 +23,11 @@ class TranslationRouterTest {
     }
 
     @Test
-    fun automaticModeSendsOtherLanguagesToPortuguese() {
-        val route = TranslationRouter.route(TranslationMode.AUTO_PT_EN, "fr")
-        assertEquals("fr", route.sourceTag)
-        assertEquals("pt", route.targetTag)
-        assertTrue(route.shouldTranslate)
+    fun automaticModeRejectsUnexpectedLanguageInsteadOfInventingRoute() {
+        val route = TranslationRouter.route(TranslationMode.AUTO_PT_EN, "sv")
+        assertNull(route.sourceTag)
+        assertNull(route.targetTag)
+        assertFalse(route.shouldTranslate)
     }
 
     @Test
