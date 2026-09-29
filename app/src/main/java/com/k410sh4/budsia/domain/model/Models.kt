@@ -108,6 +108,7 @@ data class ConversationItem(
     val id: Long = 0,
     val timestamp: Long = System.currentTimeMillis(),
     val speakerLabel: String = "Falante A",
+    val speakerSimilarity: Float? = null,
     val originalText: String,
     val languageTag: String? = null,
     val languageConfidence: Float? = null,
