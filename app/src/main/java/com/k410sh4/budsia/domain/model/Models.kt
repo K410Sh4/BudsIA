@@ -71,6 +71,11 @@ data class AnalysisSignal(
     val explanation: String
 )
 
+data class LanguageGuess(
+    val languageTag: String?,
+    val confidence: Float
+)
+
 data class ConversationItem(
     val id: Long = 0,
     val timestamp: Long = System.currentTimeMillis(),
