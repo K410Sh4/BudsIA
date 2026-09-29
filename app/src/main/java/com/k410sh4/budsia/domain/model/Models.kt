@@ -76,12 +76,42 @@ data class LanguageGuess(
     val confidence: Float
 )
 
+enum class TranslationMode {
+    AUTO_PT_EN,
+    PT_TO_EN,
+    EN_TO_PT
+}
+
+data class TranslationRoute(
+    val sourceTag: String?,
+    val targetTag: String?,
+    val shouldTranslate: Boolean
+)
+
+object TranslationRouter {
+    fun route(mode: TranslationMode, detectedLanguage: String?): TranslationRoute {
+        val lang = detectedLanguage?.substringBefore('-')?.lowercase()
+        return when (mode) {
+            TranslationMode.PT_TO_EN -> TranslationRoute("pt", "en", lang == null || lang == "pt")
+            TranslationMode.EN_TO_PT -> TranslationRoute("en", "pt", lang == null || lang == "en")
+            TranslationMode.AUTO_PT_EN -> when (lang) {
+                "pt" -> TranslationRoute("pt", "en", true)
+                "en" -> TranslationRoute("en", "pt", true)
+                null -> TranslationRoute(null, null, false)
+                else -> TranslationRoute(lang, "pt", true)
+            }
+        }
+    }
+}
+
 data class ConversationItem(
     val id: Long = 0,
     val timestamp: Long = System.currentTimeMillis(),
-    val speakerLabel: String = "Speaker A",
+    val speakerLabel: String = "Falante A",
     val originalText: String,
     val languageTag: String? = null,
+    val languageConfidence: Float? = null,
+    val translationTargetTag: String? = null,
     val translatedText: String? = null,
     val recognitionConfidence: Float? = null,
     val signals: List<AnalysisSignal> = emptyList()
