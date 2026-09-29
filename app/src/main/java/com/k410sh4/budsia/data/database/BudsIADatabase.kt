@@ -10,6 +10,8 @@ data class ConversationEntity(
     val speakerLabel: String,
     val originalText: String,
     val languageTag: String?,
+    val languageConfidence: Float?,
+    val translationTargetTag: String?,
     val translatedText: String?,
     val recognitionConfidence: Float?,
     val signalsJson: String
@@ -29,7 +31,7 @@ interface ConversationDao {
 
 @Database(
     entities = [ConversationEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class BudsIADatabase : RoomDatabase() {
