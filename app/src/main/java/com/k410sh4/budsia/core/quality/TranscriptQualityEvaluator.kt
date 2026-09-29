@@ -32,7 +32,7 @@ class TranscriptQualityEvaluator {
         var score = 1f
         val reasons = mutableListOf<String>()
         val words = clean.lowercase()
-            .replace(Regex("[^\p{L}\p{N}\s']"), " ")
+            .replace(Regex("""[^\p{L}\p{N}\s']"""), " ")
             .split(Regex("""\s+"""))
             .filter { it.isNotBlank() }
 
