@@ -101,45 +101,45 @@ class BudsIAViewModel @Inject constructor(
             val speechAvailable = speech.checkAvailability()
             _capabilities.value = AiCapabilities(
                 onDeviceSpeech = AiCapability(
-                    "On-device speech",
+                    "Reconhecimento de voz local",
                     if (speechAvailable) AiCapabilityState.READY else AiCapabilityState.UNAVAILABLE,
                     if (speechAvailable)
-                        "Android on-device SpeechRecognizer available; language models are checked separately"
+                        "SpeechRecognizer local do Android disponível; os idiomas são verificados separadamente"
                     else
-                        "Requires Android 12+ and an installed on-device recognition service"
+                        "Requer Android 12+ e um serviço local de reconhecimento instalado"
                 ),
                 languageId = AiCapability(
-                    "Language identification",
+                    "Identificação de idioma",
                     AiCapabilityState.READY,
-                    "ML Kit bundled model with confidence threshold"
+                    "ML Kit local com limiar de confiança"
                 ),
                 translation = AiCapability(
-                    "Offline translation",
+                    "Tradução offline",
                     if (downloaded.isEmpty()) AiCapabilityState.DOWNLOAD_REQUIRED else AiCapabilityState.READY,
                     if (downloaded.isEmpty())
-                        "Install translation models in Models"
+                        "Instale os modelos de tradução em Modelos"
                     else
-                        "Installed: " + downloaded.sorted().joinToString()
+                        "Instalados: " + downloaded.sorted().joinToString()
                 ),
                 speakerDiarization = AiCapability(
-                    "Speaker diarization",
+                    "Diarização de falantes",
                     AiCapabilityState.PLANNED,
-                    "sherpa-onnx local pipeline planned for the next phase"
+                    "Pipeline local sherpa-onnx planejado para a próxima fase"
                 ),
                 speakerIdentification = AiCapability(
-                    "Speaker identification",
+                    "Identificação de falantes",
                     AiCapabilityState.PLANNED,
-                    "Local voice embeddings planned after diarization"
+                    "Embeddings locais de voz serão adicionados após a diarização"
                 ),
                 localLlm = AiCapability(
-                    "Local LLM",
+                    "LLM local",
                     AiCapabilityState.PLANNED,
-                    "Gemini Nano capability probe + LiteRT-LM fallback planned"
+                    "Teste de Gemini Nano + fallback LiteRT-LM planejados"
                 ),
                 discourseAnalysis = AiCapability(
-                    "Discourse analysis",
+                    "Análise discursiva",
                     AiCapabilityState.EXPERIMENTAL,
-                    "Transparent local rules with evidence; no hidden-intent claims"
+                    "Regras locais transparentes com evidências; sem afirmar intenção oculta"
                 )
             )
         }
@@ -147,7 +147,7 @@ class BudsIAViewModel @Inject constructor(
 
     fun startLive(inputLanguageTag: String? = null) {
         if (!speech.checkAvailability()) {
-            _events.tryEmit("On-device speech recognition is not available on this phone.")
+            _events.tryEmit("Reconhecimento de voz local recognition is not available on this phone.")
             return
         }
 
@@ -155,7 +155,7 @@ class BudsIAViewModel @Inject constructor(
         continuous = true
         _pipeline.value = _pipeline.value.copy(
             running = true,
-            stage = "Preparing offline speech",
+            stage = "Preparando voz offline",
             error = null
         )
         speech.startContinuous(inputLanguageTag)
@@ -175,26 +175,26 @@ class BudsIAViewModel @Inject constructor(
     fun clearSavedTimeline() {
         viewModelScope.launch {
             conversations.clear()
-            _events.emit("Saved timeline cleared.")
+            _events.emit("Histórico salvo apagado.")
         }
     }
 
     fun downloadModel(languageTag: String) {
         viewModelScope.launch {
-            _events.emit("Downloading translation model for $languageTag over Wi-Fi…")
+            _events.emit("Baixando modelo de tradução para $languageTag over Wi-Fi…")
             language.downloadLanguageModel(languageTag)
                 .onSuccess {
-                    _events.emit("$languageTag translation model installed.")
+                    _events.emit("$languageTag: modelo de tradução instalado.")
                     refreshCapabilities()
                 }
                 .onFailure {
-                    _events.emit(it.message ?: "Translation model download failed")
+                    _events.emit(it.message ?: "Falha ao baixar modelo de tradução")
                 }
         }
     }
 
     fun downloadSpeechModel(languageTag: String) {
-        _events.tryEmit("Requesting Android offline speech model for $languageTag…")
+        _events.tryEmit("Solicitando modelo de voz offline do Android para $languageTag…")
         speech.downloadLanguageModel(languageTag)
     }
 
