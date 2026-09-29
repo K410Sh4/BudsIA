@@ -91,9 +91,13 @@ class SpeakerIdentityRegistry(
         val secondScore = ranked.getOrNull(1)?.second ?: -1f
         val margin = best.second - secondScore
 
-        val accepted =
-            best.second >= strongMatchThreshold ||
-                (best.second >= matchThreshold && margin >= ambiguityMargin)
+        val accepted = when {
+            profiles.size == 1 -> best.second >= matchThreshold
+            best.second >= 0.78f -> true
+            best.second >= strongMatchThreshold && margin >= 0.04f -> true
+            best.second >= matchThreshold && margin >= ambiguityMargin -> true
+            else -> false
+        }
 
         if (accepted) {
             localWindowAssignments[localSpeakerId] = best.first.label
