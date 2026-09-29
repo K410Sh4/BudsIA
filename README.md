@@ -1,293 +1,125 @@
-# BudsIA
+# BudsIA V2
 
-**BudsIA** is a local-first Android application for live conversation assistance.
+BudsIA é um aplicativo Android local-first para conversas, tradução bidirecional e análise linguística.
 
-The long-term goal is to combine:
+## Versão atual
 
-- on-device speech recognition;
-- local language identification;
-- offline translation;
-- speaker diarization;
-- speaker identification using local voice embeddings;
-- explainable fallacy / persuasion analysis;
-- local LLM reasoning;
-- a private conversation timeline.
+**2.0.0-alpha**
 
-The application is designed so that unsupported or unfinished AI features are never presented as working.
+A V2 é uma reconstrução completa do motor de conversa a partir dos testes reais da primeira versão.
 
-## Current version
-
-**0.3.0-alpha**
-
-Implemented now:
-
-- Kotlin
-- Jetpack Compose
-- Material 3
-- Clean/MVVM-oriented architecture
-- Hilt
-- Room
-- DataStore
-- Coroutines / Flow / StateFlow
-- Android on-device SpeechRecognizer capability detection
-- stable continuous local speech loop with automatic recovery from client/busy errors
-- offline speech-language model detection and explicit download for PT-BR / EN-US / ES-ES
-- local speech recognition when Android exposes an on-device recognizer
-- contextual microphone permission
-- ML Kit bundled language identification with confidence filtering
-- ML Kit on-device translation
-- explicit translation-model downloads
-- strict offline live-session mode
-- local Room timeline
-- in-memory session timeline
-- explainable rule-based discourse analysis
-- evidence + confidence for every detected signal
-- custom BudsIA visual identity, launcher icon and Android 12+ splash screen
-- premium dark UI
-- GitHub Actions APK build
-- unit tests
-
-## Important transparency rules
-
-BudsIA V0.1 does **not** claim that it can read thoughts, hidden motives, or a person's true intent.
-
-Current analysis can surface linguistic patterns such as:
-
-- artificial urgency
-- guilt pressure
-- possible false dilemma
-- ad hominem
-- appeal to popularity
-- threat/coercion language
-- scarcity pressure
-- implied requests
-
-Each result includes:
-
-- category
-- confidence
-- matched evidence
-- explanation
-
-These are linguistic cues, not proof of malicious intent.
-
-## Offline architecture
-
-Live sessions follow:
+## Pipeline principal
 
 ```text
-Microphone
-   ↓
-Android on-device SpeechRecognizer
-   ↓
-ML Kit Language ID
-   ↓
-ML Kit Translation
-   ↓
-Explainable local analysis
-   ↓
-Timeline
+AudioRecord 16 kHz
+        ↓
+janela de conversa
+        ↓
+Pyannote Segmentation 3.0
+        ↓
+segmentos por falante
+        ↓
+Whisper Base multilíngue
+        ↓
+ERes2Net
+        ↓
+registro estável A/B/C
+        ↓
+Whisper lang + ML Kit + histórico do falante
+        ↓
+PT → EN / EN → PT
+        ↓
+análise explicável + timeline
 ```
 
-Live sessions never automatically download a model.
+## Modos
 
-Translation-model downloads only start when the user explicitly taps **Download** in the Models screen.
+### Conversa V2
 
-The app does not intentionally use a cloud speech fallback in V0.1. If Android does not expose an on-device SpeechRecognizer, the feature is marked **UNAVAILABLE**.
+Motor recomendado.
 
-## Current AI capability states
+Requer download explícito do pacote:
 
-### READY when supported by device
+- Whisper Base multilingual;
+- Pyannote Segmentation 3.0;
+- ERes2Net.
 
-- On-device SpeechRecognizer
-- Language identification
-- Translation after required models are installed
+Depois do download, a inferência é local.
 
-### EXPERIMENTAL
+### Compatibilidade Android
 
-- Explainable discourse analysis
+Usa SpeechRecognizer on-device quando o Android expõe o recurso.
 
-### PLANNED
+É mais leve, mas não possui separação real de pessoas.
 
-- speaker diarization using sherpa-onnx
-- local speaker embeddings / speaker identification
-- Gemini Nano capability detection
-- LiteRT-LM local LLM fallback
-- context-aware intent analysis
-- contradiction tracking
-- long-context conversation reasoning
-- local feedback/personalization layer
+## Tradução
 
-## Translation
+Modos:
 
-BudsIA uses ML Kit Translation.
+- Automático PT ↔ EN
+- PT → EN
+- EN → PT
 
-Initial model-management buttons:
+O modo automático não inventa rotas para outros idiomas. Idioma incerto fica sem tradução.
 
-- Portuguese
-- English
-- Spanish
+## Identidade de falante
 
-The architecture supports adding more supported ML Kit languages later.
+Os rótulos A/B/C são temporários por sessão.
 
-## Privacy
+Estados:
 
-Current behavior:
+- ESTÁVEL
+- APRENDENDO
+- INCERTO
 
-- microphone permission is requested only when Live Conversation starts;
-- raw microphone audio is not saved;
-- recording is not started silently in background;
-- transcript persistence can be disabled;
-- live-session model downloads are disabled;
-- speaker identity is not implemented yet, so no voice profiles are stored.
+A V2 nunca força uma identidade quando a similaridade não é suficiente.
 
-## Screens
+## Qualidade
 
-### Home
+Trechos silenciosos, muito curtos ou com repetição anormal podem ser rejeitados antes de contaminar a tradução e a identidade do falante.
 
-Shows the real status of each AI subsystem:
+## Privacidade
 
-- READY
-- DOWNLOAD
-- UNAVAILABLE
-- EXPERIMENTAL
-- PLANNED
+- microfone somente em sessão iniciada pelo usuário;
+- áudio bruto não é salvo no histórico;
+- perfis A/B/C ficam apenas na sessão atual;
+- modelos são baixados explicitamente;
+- transcrição pode ser mantida apenas em memória;
+- nenhuma alegação de leitura de pensamentos ou intenção mental.
 
-### Live
+## Banco local
 
-- local microphone session
-- partial transcript
-- final transcript
-- language detection
-- translation
-- discourse-analysis signals
-- session timeline
-- explicit STOP control
-
-### Timeline
-
-Displays locally saved conversation segments.
-
-### Models
-
-Shows installed translation models and allows explicit downloads.
-
-### Privacy
-
-Controls:
-
-- strict offline sessions
-- transcript persistence
-- translation target
-
-## Development roadmap
-
-### V0.1 — current
-
-Speech → language ID → translation → explainable rule analysis → timeline.
-
-### V0.3 — current
-
-- interface em português
-- tradução bidirecional automática PT ↔ EN por trecho
-- direção PT → EN / EN → PT visível em cada cartão
-- confiança do idioma exibida
-- metadados de idioma e direção salvos por trecho
-- estrutura pronta para aplicar idioma/tradução por falante quando a diarização estiver ativa
-
-### V0.2 — stabilization
-
-- continuous SpeechRecognizer lifecycle recovery
-- Android offline speech model manager
-- language confidence calibration
-- custom BudsIA visual identity
-
-### V0.3
-
-- local VAD
-- speaker diarization
-- speaker embeddings
-- speaker profile enrollment
-- speaker A/B/name timeline
-- audio-device routing improvements
-
-### V0.4
-
-- Gemini Nano capability probe
-- LiteRT-LM fallback
-- quantized Gemma model management
-- local intent/fallacy/persuasion reasoning
-- confidence calibration
-- context-window analysis
-
-### V0.5
-
-- user corrections
-- local personalization memory
-- vocabulary correction
-- speaker-centroid learning
-- encrypted voice embeddings
-- session summaries
+Room preserva o histórico das versões anteriores e adiciona telemetria V2.
 
 ## Build
 
-Requirements:
+Requisitos:
 
 - JDK 17
-- Gradle 9.6
 - Android SDK 36
-- Android build tools 36.0.0
-
-Commands:
+- Gradle 9.6
 
 ```bash
 gradle :app:testDebugUnitTest
 gradle :app:assembleDebug
 ```
 
-APK output:
+O GitHub Actions verifica o SHA-256 do runtime sherpa-onnx antes de compilar.
 
-```text
-app/build/outputs/apk/debug/app-debug.apk
-```
+## Testes de regressão
 
-GitHub Actions runs unit tests before assembling and uploading the APK.
+Existem testes específicos para os erros descobertos na primeira versão:
 
-## Package
+- não criar falante com trecho curto;
+- não forçar perfil após atingir limite;
+- rejeitar identidade ambígua;
+- manter mesma voz entre janelas;
+- impedir rota sv → pt;
+- usar consenso PT/EN;
+- rejeitar silêncio e repetição anormal.
 
-```text
-com.k410sh4.budsia
-```
+Consulte `docs/V2_AUDIT.md` para a análise completa.
 
-## Current project structure
+## V1 arquivada
 
-```text
-app/src/main/java/com/k410sh4/budsia/
-├── core/
-│   ├── analysis/
-│   ├── language/
-│   └── speech/
-├── data/
-│   ├── database/
-│   ├── repository/
-│   └── settings/
-├── di/
-├── domain/
-│   └── model/
-├── feature/
-│   └── main/
-└── ui/
-    └── theme/
-```
-
-## Safety / scope
-
-BudsIA is an assistance tool. It should not be used to make definitive claims about another person's motives, honesty, mental state, or hidden intentions.
-
-Future model-based analysis must preserve this rule by separating:
-
-- observed wording;
-- model inference;
-- confidence;
-- alternative interpretations;
-- insufficient-evidence cases.
+`archive/v1-first-model`
