@@ -155,3 +155,34 @@ data class LivePipelineState(
     val lastItem: ConversationItem? = null,
     val error: String? = null
 )
+
+enum class AdvancedModelStatus {
+    NOT_INSTALLED,
+    DOWNLOADING,
+    READY,
+    ERROR
+}
+
+data class AdvancedModelState(
+    val status: AdvancedModelStatus = AdvancedModelStatus.NOT_INSTALLED,
+    val currentFile: String? = null,
+    val progress: Float = 0f,
+    val message: String = "Modelos avançados não instalados"
+)
+
+data class AdvancedSpeakerState(
+    val available: Boolean = false,
+    val running: Boolean = false,
+    val modelState: AdvancedModelState = AdvancedModelState(),
+    val speakerCount: Int = 0,
+    val stage: String = "Parado",
+    val error: String? = null
+)
+
+data class AdvancedUtterance(
+    val speakerLabel: String,
+    val text: String,
+    val languageTag: String?,
+    val speakerSimilarity: Float?,
+    val durationMs: Long
+)
