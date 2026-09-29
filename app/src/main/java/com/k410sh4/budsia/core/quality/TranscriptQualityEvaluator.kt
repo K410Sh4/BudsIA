@@ -33,7 +33,7 @@ class TranscriptQualityEvaluator {
         val reasons = mutableListOf<String>()
         val words = clean.lowercase()
             .replace(Regex("[^\p{L}\p{N}\s']"), " ")
-            .split(Regex("\s+"))
+            .split(Regex("""\s+"""))
             .filter { it.isNotBlank() }
 
         if (durationMs < 900L) {
