@@ -26,7 +26,6 @@ import com.k410sh4.budsia.domain.model.AdvancedSpeakerState
 import com.k410sh4.budsia.domain.model.AdvancedUtterance
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -162,10 +161,7 @@ class AdvancedLocalSpeakerEngine @Inject constructor(
                 "Não foi possível iniciar o microfone em 16 kHz mono."
             }
 
-            val channel = Channel<AudioWindow>(
-                capacity = 2,
-                onBufferOverflow = BufferOverflow.DROP_OLDEST
-            )
+            val channel = Channel<AudioWindow>(capacity = 2)
             windowChannel = channel
             audioRecord = record
 
