@@ -18,6 +18,10 @@ object AppModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): BudsIADatabase =
         Room.databaseBuilder(context, BudsIADatabase::class.java, "budsia.db")
+            .addMigrations(
+                BudsIADatabase.MIGRATION_1_2,
+                BudsIADatabase.MIGRATION_2_3
+            )
             .fallbackToDestructiveMigration(dropAllTables = true)
             .build()
 
