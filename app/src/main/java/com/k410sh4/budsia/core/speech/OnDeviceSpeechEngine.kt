@@ -56,7 +56,7 @@ class OnDeviceSpeechEngine @Inject constructor(
                 listening = false,
                 processing = false,
                 errorCode = SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS,
-                error = "Microphone permission required"
+                error = "Permissão de microfone necessária"
             )
             return
         }
@@ -64,7 +64,7 @@ class OnDeviceSpeechEngine @Inject constructor(
         if (!checkAvailability()) {
             _state.value = SpeechState(
                 available = false,
-                error = "On-device SpeechRecognizer is unavailable on this device"
+                error = "O reconhecimento de voz local não está disponível neste aparelho"
             )
             return
         }
@@ -79,7 +79,7 @@ class OnDeviceSpeechEngine @Inject constructor(
             requestedLanguage = activeLanguageTag,
             errorCode = null,
             error = null,
-            statusMessage = "Preparing offline speech…",
+            statusMessage = "Preparando reconhecimento offline…",
             modelDownloadRequired = false,
             modelDownloadProgress = null
         )
@@ -100,7 +100,7 @@ class OnDeviceSpeechEngine @Inject constructor(
                 listening = false,
                 processing = false,
                 partialText = "",
-                statusMessage = "Stopped",
+                statusMessage = "Parado",
                 errorCode = null,
                 error = null
             )
@@ -117,7 +117,7 @@ class OnDeviceSpeechEngine @Inject constructor(
                 SpeechLanguageModelState(
                     languageTag = it,
                     status = SpeechLanguageStatus.UNSUPPORTED,
-                    detail = "On-device recognizer unavailable"
+                    detail = "Reconhecedor local indisponível"
                 )
             }
             return
@@ -128,7 +128,7 @@ class OnDeviceSpeechEngine @Inject constructor(
                 SpeechLanguageModelState(
                     languageTag = it,
                     status = SpeechLanguageStatus.UNKNOWN,
-                    detail = "Android version cannot query offline model status"
+                    detail = "Esta versão do Android não consegue consultar o estado do modelo offline"
                 )
             }
             return
@@ -157,10 +157,10 @@ class OnDeviceSpeechEngine @Inject constructor(
                                         tag,
                                         status,
                                         when (status) {
-                                            SpeechLanguageStatus.INSTALLED -> "Offline speech model installed"
-                                            SpeechLanguageStatus.PENDING -> "Offline speech model download pending"
-                                            SpeechLanguageStatus.DOWNLOAD_REQUIRED -> "Supported; download required"
-                                            SpeechLanguageStatus.UNSUPPORTED -> "Not supported by this on-device recognizer"
+                                            SpeechLanguageStatus.INSTALLED -> "Modelo de voz offline instalado"
+                                            SpeechLanguageStatus.PENDING -> "Download do modelo de voz offline pendente"
+                                            SpeechLanguageStatus.DOWNLOAD_REQUIRED -> "Suportado; download necessário"
+                                            SpeechLanguageStatus.UNSUPPORTED -> "Não suportado por este reconhecedor local"
                                             SpeechLanguageStatus.UNKNOWN -> "Unknown"
                                         }
                                     )
@@ -170,7 +170,7 @@ class OnDeviceSpeechEngine @Inject constructor(
                                     updateLanguageModel(
                                         tag,
                                         SpeechLanguageStatus.UNKNOWN,
-                                        "Support check failed: " + errorLabel(error)
+                                        "Falha ao verificar suporte: " + errorLabel(error)
                                     )
                                 }
                             }
@@ -179,7 +179,7 @@ class OnDeviceSpeechEngine @Inject constructor(
                         updateLanguageModel(
                             tag,
                             SpeechLanguageStatus.UNKNOWN,
-                            it.message ?: "Unable to query speech model"
+                            it.message ?: "Não foi possível consultar o modelo de voz"
                         )
                     }
                 }, index * 120L)
@@ -192,7 +192,7 @@ class OnDeviceSpeechEngine @Inject constructor(
             updateLanguageModel(
                 languageTag,
                 SpeechLanguageStatus.UNSUPPORTED,
-                "On-device recognizer unavailable"
+                "Reconhecedor local indisponível"
             )
             return
         }
@@ -201,7 +201,7 @@ class OnDeviceSpeechEngine @Inject constructor(
             updateLanguageModel(
                 languageTag,
                 SpeechLanguageStatus.UNKNOWN,
-                "Speech model download API requires Android 13+"
+                "Download de modelo de voz requer Android 13+"
             )
             return
         }
@@ -213,13 +213,13 @@ class OnDeviceSpeechEngine @Inject constructor(
             updateLanguageModel(
                 languageTag,
                 SpeechLanguageStatus.PENDING,
-                "Requesting offline speech model…"
+                "Solicitando modelo de voz offline…"
             )
             _state.value = _state.value.copy(
                 requestedLanguage = languageTag,
                 modelDownloadRequired = true,
                 modelDownloadProgress = null,
-                statusMessage = "Downloading offline speech model…",
+                statusMessage = "Baixando modelo de voz offline…",
                 errorCode = null,
                 error = null
             )
@@ -234,7 +234,7 @@ class OnDeviceSpeechEngine @Inject constructor(
                                 updateLanguageModel(
                                     languageTag,
                                     SpeechLanguageStatus.PENDING,
-                                    "Downloading: $completedPercent%"
+                                    "Baixando: $completedPercent%"
                                 )
                                 _state.value = _state.value.copy(
                                     modelDownloadProgress = completedPercent,
@@ -246,12 +246,12 @@ class OnDeviceSpeechEngine @Inject constructor(
                                 updateLanguageModel(
                                     languageTag,
                                     SpeechLanguageStatus.INSTALLED,
-                                    "Offline speech model installed"
+                                    "Modelo de voz offline instalado"
                                 )
                                 _state.value = _state.value.copy(
                                     modelDownloadRequired = false,
                                     modelDownloadProgress = 100,
-                                    statusMessage = "Offline speech model installed",
+                                    statusMessage = "Modelo de voz offline instalado",
                                     errorCode = null,
                                     error = null
                                 )
@@ -261,10 +261,10 @@ class OnDeviceSpeechEngine @Inject constructor(
                                 updateLanguageModel(
                                     languageTag,
                                     SpeechLanguageStatus.PENDING,
-                                    "Download scheduled by Android"
+                                    "Download agendado pelo Android"
                                 )
                                 _state.value = _state.value.copy(
-                                    statusMessage = "Speech model download scheduled"
+                                    statusMessage = "Download do modelo de voz agendado"
                                 )
                             }
 
@@ -272,19 +272,19 @@ class OnDeviceSpeechEngine @Inject constructor(
                                 updateLanguageModel(
                                     languageTag,
                                     SpeechLanguageStatus.UNKNOWN,
-                                    "Download failed: " + errorLabel(error)
+                                    "Falha no download: " + errorLabel(error)
                                 )
                                 _state.value = _state.value.copy(
                                     modelDownloadProgress = null,
                                     errorCode = error,
-                                    error = "Speech model download failed: " + errorLabel(error)
+                                    error = "Falha ao baixar modelo de voz: " + errorLabel(error)
                                 )
                             }
                         }
                     )
                 }.onFailure {
                     _state.value = _state.value.copy(
-                        error = it.message ?: "Unable to request speech model download"
+                        error = it.message ?: "Não foi possível solicitar o download do modelo de voz"
                     )
                 }
             } else {
@@ -317,7 +317,7 @@ class OnDeviceSpeechEngine @Inject constructor(
                     listening = false,
                     processing = false,
                     errorCode = SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS,
-                    error = "Microphone permission required"
+                    error = "Permissão de microfone necessária"
                 )
                 return@Runnable
             }
@@ -333,14 +333,14 @@ class OnDeviceSpeechEngine @Inject constructor(
                     requestedLanguage = activeLanguageTag,
                     errorCode = null,
                     error = null,
-                    statusMessage = "Listening…",
+                    statusMessage = "Escutando…",
                     modelDownloadRequired = false
                 )
                 r.startListening(buildIntent(activeLanguageTag))
             }.onFailure {
                 busy = false
                 recoverRecognizer(
-                    "Speech client reset; retrying…",
+                    "Cliente de voz reiniciado; tentando novamente…",
                     1_200L,
                     recreate = true
                 )
@@ -361,7 +361,7 @@ class OnDeviceSpeechEngine @Inject constructor(
             }.getOrElse {
                 _state.value = _state.value.copy(
                     available = false,
-                    error = it.message ?: "Unable to create on-device recognizer"
+                    error = it.message ?: "Não foi possível criar o reconhecedor local"
                 )
                 null
             }
@@ -418,12 +418,12 @@ class OnDeviceSpeechEngine @Inject constructor(
                 processing = false,
                 errorCode = null,
                 error = null,
-                statusMessage = "Listening…"
+                statusMessage = "Escutando…"
             )
         }
 
         override fun onBeginningOfSpeech() {
-            _state.value = _state.value.copy(statusMessage = "Speech detected")
+            _state.value = _state.value.copy(statusMessage = "Fala detectada")
         }
 
         override fun onRmsChanged(rmsdB: Float) = Unit
@@ -433,7 +433,7 @@ class OnDeviceSpeechEngine @Inject constructor(
             _state.value = _state.value.copy(
                 listening = false,
                 processing = true,
-                statusMessage = "Processing locally…"
+                statusMessage = "Processando localmente…"
             )
         }
 
@@ -446,14 +446,14 @@ class OnDeviceSpeechEngine @Inject constructor(
                     updateLanguageModel(
                         activeLanguageTag,
                         SpeechLanguageStatus.DOWNLOAD_REQUIRED,
-                        "Language is supported but its offline speech model is not installed"
+                        "O idioma é suportado, mas o modelo de voz offline não está instalado"
                     )
                     _state.value = _state.value.copy(
                         listening = false,
                         processing = false,
                         errorCode = error,
                         error = "Offline speech model missing for $activeLanguageTag",
-                        statusMessage = "Install the speech model and start the session again.",
+                        statusMessage = "Instale o modelo de voz e inicie a sessão novamente.",
                         modelDownloadRequired = true
                     )
                 }
@@ -463,13 +463,13 @@ class OnDeviceSpeechEngine @Inject constructor(
                     updateLanguageModel(
                         activeLanguageTag,
                         SpeechLanguageStatus.UNSUPPORTED,
-                        "Language not supported by this on-device recognizer"
+                        "Idioma não suportado por este reconhecedor local"
                     )
                     _state.value = _state.value.copy(
                         listening = false,
                         processing = false,
                         errorCode = error,
-                        error = "Speech language not supported: $activeLanguageTag",
+                        error = "Speech idioma não suportado: $activeLanguageTag",
                         statusMessage = null,
                         modelDownloadRequired = false
                     )
@@ -494,7 +494,7 @@ class OnDeviceSpeechEngine @Inject constructor(
                         processing = false,
                         errorCode = null,
                         error = null,
-                        statusMessage = "No clear speech detected; listening again…"
+                        statusMessage = "Nenhuma fala clara detectada; escutando novamente…"
                     )
                     if (continuous) startNext(500L)
                 }
@@ -508,7 +508,7 @@ class OnDeviceSpeechEngine @Inject constructor(
                         statusMessage = null
                     )
                     if (continuous) recoverRecognizer(
-                        "Retrying speech recognizer",
+                        "Tentando recuperar o reconhecedor de voz",
                         1_000L,
                         recreate = error == SpeechRecognizer.ERROR_AUDIO ||
                             error == SpeechRecognizer.ERROR_SERVER
@@ -536,7 +536,7 @@ class OnDeviceSpeechEngine @Inject constructor(
                 resultId = _state.value.resultId + 1,
                 errorCode = null,
                 error = null,
-                statusMessage = if (text.isBlank()) "No final text" else "Result ready"
+                statusMessage = if (text.isBlank()) "Nenhum texto final" else "Resultado pronto"
             )
 
             if (continuous) startNext(700L)
@@ -583,21 +583,21 @@ class OnDeviceSpeechEngine @Inject constructor(
         ) == PackageManager.PERMISSION_GRANTED
 
     private fun errorLabel(code: Int): String = when (code) {
-        SpeechRecognizer.ERROR_AUDIO -> "Audio capture error"
-        SpeechRecognizer.ERROR_CLIENT -> "client error"
-        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Microphone permission required"
-        SpeechRecognizer.ERROR_NETWORK -> "Network error"
-        SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Network timeout"
-        SpeechRecognizer.ERROR_NO_MATCH -> "No speech match"
-        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "recognizer busy"
-        SpeechRecognizer.ERROR_SERVER -> "Recognizer service error"
-        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "No speech detected"
-        SpeechRecognizer.ERROR_TOO_MANY_REQUESTS -> "too many requests"
-        SpeechRecognizer.ERROR_SERVER_DISCONNECTED -> "speech service disconnected"
-        SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED -> "language not supported"
-        SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE -> "offline language model not downloaded"
-        SpeechRecognizer.ERROR_CANNOT_CHECK_SUPPORT -> "support check unavailable"
-        SpeechRecognizer.ERROR_CANNOT_LISTEN_TO_DOWNLOAD_EVENTS -> "download progress unavailable"
-        else -> "Speech recognition error $code"
+        SpeechRecognizer.ERROR_AUDIO -> "Erro na captura de áudio"
+        SpeechRecognizer.ERROR_CLIENT -> "erro do cliente"
+        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Permissão de microfone necessária"
+        SpeechRecognizer.ERROR_NETWORK -> "Erro de rede"
+        SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Tempo limite de rede"
+        SpeechRecognizer.ERROR_NO_MATCH -> "Nenhuma fala reconhecida"
+        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "reconhecedor ocupado"
+        SpeechRecognizer.ERROR_SERVER -> "Erro no serviço de reconhecimento"
+        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "Nenhuma fala detectada"
+        SpeechRecognizer.ERROR_TOO_MANY_REQUESTS -> "muitas solicitações"
+        SpeechRecognizer.ERROR_SERVER_DISCONNECTED -> "serviço de voz desconectado"
+        SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED -> "idioma não suportado"
+        SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE -> "modelo offline do idioma não baixado"
+        SpeechRecognizer.ERROR_CANNOT_CHECK_SUPPORT -> "verificação de suporte indisponível"
+        SpeechRecognizer.ERROR_CANNOT_LISTEN_TO_DOWNLOAD_EVENTS -> "progresso de download indisponível"
+        else -> "Erro de reconhecimento de voz $code"
     }
 }
