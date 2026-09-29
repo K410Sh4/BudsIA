@@ -65,6 +65,9 @@ dependencies {
     implementation("com.google.mlkit:language-id:17.0.6")
     implementation("com.google.mlkit:translate:17.0.3")
 
+    implementation(files("libs/sherpa-onnx-1.13.8.aar"))
+    implementation("org.apache.commons:commons-compress:1.27.1")
+
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
 
     testImplementation("junit:junit:4.13.2")
