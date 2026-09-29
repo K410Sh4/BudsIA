@@ -3,6 +3,7 @@ package com.k410sh4.budsia.data.repository
 import com.k410sh4.budsia.data.database.ConversationDao
 import com.k410sh4.budsia.data.database.ConversationEntity
 import com.k410sh4.budsia.domain.model.AnalysisSignal
+import com.k410sh4.budsia.domain.model.ConversationEngine
 import com.k410sh4.budsia.domain.model.ConversationItem
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -24,29 +25,46 @@ class ConversationRepository @Inject constructor(
 
     private fun ConversationEntity.toDomain() = ConversationItem(
         id = id,
+        sessionId = sessionId,
         timestamp = timestamp,
         speakerLabel = speakerLabel,
         speakerSimilarity = speakerSimilarity,
+        speakerStable = speakerStable,
         originalText = originalText,
         languageTag = languageTag,
         languageConfidence = languageConfidence,
+        languageReason = languageReason,
         translationTargetTag = translationTargetTag,
         translatedText = translatedText,
+        translationStatus = translationStatus,
         recognitionConfidence = recognitionConfidence,
+        transcriptQuality = transcriptQuality,
+        transcriptQualityReason = transcriptQualityReason,
+        durationMs = durationMs,
+        engine = runCatching { ConversationEngine.valueOf(engine) }
+            .getOrDefault(ConversationEngine.ANDROID_COMPAT),
         signals = decodeSignals(signalsJson)
     )
 
     private fun ConversationItem.toEntity() = ConversationEntity(
         id = id,
+        sessionId = sessionId,
         timestamp = timestamp,
         speakerLabel = speakerLabel,
         speakerSimilarity = speakerSimilarity,
+        speakerStable = speakerStable,
         originalText = originalText,
         languageTag = languageTag,
         languageConfidence = languageConfidence,
+        languageReason = languageReason,
         translationTargetTag = translationTargetTag,
         translatedText = translatedText,
+        translationStatus = translationStatus,
         recognitionConfidence = recognitionConfidence,
+        transcriptQuality = transcriptQuality,
+        transcriptQualityReason = transcriptQualityReason,
+        durationMs = durationMs,
+        engine = engine.name,
         signalsJson = encodeSignals(signals)
     )
 
