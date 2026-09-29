@@ -488,7 +488,6 @@ class AdvancedLocalSpeakerEngine @Inject constructor(
         audioRecord = null
 
         releaseNativeModels()
-        registry.reset()
     }
 
     private fun releaseNativeModels() {
