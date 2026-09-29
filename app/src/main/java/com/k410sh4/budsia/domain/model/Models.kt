@@ -82,13 +82,34 @@ data class ConversationItem(
     val signals: List<AnalysisSignal> = emptyList()
 )
 
+enum class SpeechLanguageStatus {
+    INSTALLED,
+    DOWNLOAD_REQUIRED,
+    PENDING,
+    UNSUPPORTED,
+    UNKNOWN
+}
+
+data class SpeechLanguageModelState(
+    val languageTag: String,
+    val status: SpeechLanguageStatus = SpeechLanguageStatus.UNKNOWN,
+    val detail: String = ""
+)
+
 data class SpeechState(
     val available: Boolean = false,
     val listening: Boolean = false,
+    val processing: Boolean = false,
     val partialText: String = "",
     val finalText: String = "",
     val confidence: Float? = null,
-    val error: String? = null
+    val resultId: Long = 0,
+    val requestedLanguage: String? = null,
+    val errorCode: Int? = null,
+    val error: String? = null,
+    val statusMessage: String? = null,
+    val modelDownloadRequired: Boolean = false,
+    val modelDownloadProgress: Int? = null
 )
 
 data class LivePipelineState(
