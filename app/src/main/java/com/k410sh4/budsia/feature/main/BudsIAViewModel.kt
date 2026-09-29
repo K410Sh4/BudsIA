@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.k410sh4.budsia.core.advanced.AdvancedLocalSpeakerEngine
 import com.k410sh4.budsia.core.advanced.AdvancedModelManager
 import com.k410sh4.budsia.core.analysis.ExplainableDiscourseAnalyzer
+import com.k410sh4.budsia.core.language.BilingualLanguageResolver
+import com.k410sh4.budsia.core.language.LanguageDecision
 import com.k410sh4.budsia.core.language.LocalLanguageEngine
 import com.k410sh4.budsia.core.speech.OnDeviceSpeechEngine
 import com.k410sh4.budsia.data.repository.ConversationRepository
@@ -13,6 +15,7 @@ import com.k410sh4.budsia.domain.model.*
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.util.UUID
 import javax.inject.Inject
 
 @HiltViewModel
@@ -25,10 +28,10 @@ class BudsIAViewModel @Inject constructor(
     private val advancedModels: AdvancedModelManager,
     private val advancedEngine: AdvancedLocalSpeakerEngine
 ) : ViewModel() {
+
     val speechState = speech.state
     val speechLanguageModels = speech.languageModels
     val timeline = conversations.recent
-
     val advancedModelState = advancedModels.state
     val advancedSpeakerState = advancedEngine.state
 
@@ -42,6 +45,8 @@ class BudsIAViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TranslationMode.AUTO_PT_EN)
     val advancedSpeakerMode = settings.advancedSpeakerMode
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+    val expectedSpeakers = settings.expectedSpeakers
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
     private val _pipeline = MutableStateFlow(LivePipelineState())
     val pipeline: StateFlow<LivePipelineState> = _pipeline.asStateFlow()
@@ -58,11 +63,36 @@ class BudsIAViewModel @Inject constructor(
     private val _events = MutableSharedFlow<String>(extraBufferCapacity = 24)
     val events = _events.asSharedFlow()
 
+    private val bilingualResolver = BilingualLanguageResolver()
+    private val speechTags = listOf("pt-BR", "en-US", "es-ES")
+
+    private data class SpeakerLanguageMemory(
+        var ptWeight: Float = 0f,
+        var enWeight: Float = 0f
+    ) {
+        fun add(tag: String, weight: Float) {
+            when (tag) {
+                "pt" -> ptWeight += weight
+                "en" -> enWeight += weight
+            }
+        }
+
+        fun dominant(): String? {
+            val total = ptWeight + enWeight
+            if (total < 1.1f) return null
+            val difference = kotlin.math.abs(ptWeight - enWeight)
+            if (difference < 0.45f) return null
+            return if (ptWeight > enWeight) "pt" else "en"
+        }
+    }
+
+    private val speakerLanguages = mutableMapOf<String, SpeakerLanguageMemory>()
+    private val translationWarnings = mutableSetOf<String>()
+
     private var standardContinuous = false
     private var lastProcessedResultId = 0L
     private var activeInputLanguageTag: String? = null
-
-    private val speechTags = listOf("pt-BR", "en-US", "es-ES")
+    private var currentSessionId = ""
 
     init {
         refreshCapabilities()
@@ -96,7 +126,10 @@ class BudsIAViewModel @Inject constructor(
 
                 if (state.resultId > lastProcessedResultId && state.finalText.isNotBlank()) {
                     lastProcessedResultId = state.resultId
-                    processStandardUtterance(state.finalText.trim(), state.confidence)
+                    processStandardUtterance(
+                        text = state.finalText.trim(),
+                        confidence = state.confidence
+                    )
                 }
             }
         }
@@ -131,65 +164,74 @@ class BudsIAViewModel @Inject constructor(
         viewModelScope.launch {
             speech.refreshLanguageSupport(speechTags)
 
-            val downloaded = runCatching { language.downloadedLanguages() }.getOrDefault(emptySet())
+            val downloaded = runCatching {
+                language.downloadedLanguages()
+            }.getOrDefault(emptySet())
+
             _downloadedLanguages.value = downloaded
 
             val speechAvailable = speech.checkAvailability()
-            val speakerModelsReady = advancedModels.isReady()
+            val v2Ready = advancedModels.isReady()
+            val ptEnReady = downloaded.contains("pt") && downloaded.contains("en")
 
             _capabilities.value = AiCapabilities(
                 onDeviceSpeech = AiCapability(
-                    "Reconhecimento de voz local",
-                    if (speechAvailable) AiCapabilityState.READY else AiCapabilityState.UNAVAILABLE,
-                    if (speechAvailable)
-                        "SpeechRecognizer local do Android disponível; os idiomas são verificados separadamente"
-                    else
-                        "O modo avançado pode funcionar independentemente após instalar seus modelos"
+                    "Reconhecimento de voz",
+                    if (speechAvailable || v2Ready) AiCapabilityState.READY else AiCapabilityState.UNAVAILABLE,
+                    when {
+                        v2Ready -> "Motor V2 local disponível"
+                        speechAvailable -> "Modo compatível do Android disponível"
+                        else -> "Nenhum motor local pronto"
+                    }
                 ),
                 languageId = AiCapability(
                     "Identificação de idioma",
-                    AiCapabilityState.READY,
-                    "ML Kit local no modo básico; Whisper multilíngue no modo avançado"
+                    if (v2Ready) AiCapabilityState.EXPERIMENTAL else AiCapabilityState.READY,
+                    if (v2Ready)
+                        "Consenso: Whisper + ML Kit + histórico do falante"
+                    else
+                        "ML Kit local"
                 ),
                 translation = AiCapability(
-                    "Tradução offline",
-                    if (downloaded.isEmpty()) AiCapabilityState.DOWNLOAD_REQUIRED else AiCapabilityState.READY,
-                    if (downloaded.isEmpty())
-                        "Instale os modelos de tradução em Modelos"
+                    "Tradução PT ↔ EN",
+                    if (ptEnReady) AiCapabilityState.READY else AiCapabilityState.DOWNLOAD_REQUIRED,
+                    if (ptEnReady)
+                        "Português e inglês instalados para tradução offline"
                     else
-                        "Instalados: " + downloaded.sorted().joinToString()
+                        "Instale os modelos PT e EN"
                 ),
                 speakerDiarization = AiCapability(
-                    "Separação de falantes",
-                    if (speakerModelsReady) AiCapabilityState.EXPERIMENTAL else AiCapabilityState.DOWNLOAD_REQUIRED,
-                    if (speakerModelsReady)
-                        "AudioRecord + Silero VAD + embeddings ERes2Net prontos para teste"
+                    "Separação de falantes V2",
+                    if (v2Ready) AiCapabilityState.EXPERIMENTAL else AiCapabilityState.DOWNLOAD_REQUIRED,
+                    if (v2Ready)
+                        "Pyannote + ERes2Net com rejeição de incerteza"
                     else
-                        "Requer o pacote opcional de modelos avançados"
+                        "Requer o pacote de conversação V2"
                 ),
                 speakerIdentification = AiCapability(
-                    "Reconhecimento de voz por pessoa",
-                    if (speakerModelsReady) AiCapabilityState.EXPERIMENTAL else AiCapabilityState.PLANNED,
-                    if (speakerModelsReady)
-                        "Agrupa vozes em Falante A/B/C; nomes cadastrados serão a próxima camada"
+                    "Identidade por voz",
+                    if (v2Ready) AiCapabilityState.EXPERIMENTAL else AiCapabilityState.PLANNED,
+                    if (v2Ready)
+                        "Perfis temporários A/B/C por sessão; nomes pessoais virão após calibração"
                     else
-                        "Disponível após instalar e validar a separação de falantes"
+                        "Disponível após instalar o V2"
                 ),
                 localLlm = AiCapability(
                     "LLM local",
                     AiCapabilityState.PLANNED,
-                    "Teste de Gemini Nano + fallback LiteRT-LM planejados"
+                    "Será adicionado depois que voz/idioma estiverem estáveis"
                 ),
                 discourseAnalysis = AiCapability(
                     "Análise discursiva",
                     AiCapabilityState.EXPERIMENTAL,
-                    "Regras locais transparentes com evidências; sem afirmar intenção oculta"
+                    "Regras explicáveis; não afirma intenção oculta como fato"
                 )
             )
         }
     }
 
     fun startLive(inputLanguageTag: String? = null) {
+        beginSessionIfNeeded()
         activeInputLanguageTag = inputLanguageTag
 
         if (advancedSpeakerMode.value) {
@@ -197,17 +239,15 @@ class BudsIAViewModel @Inject constructor(
                 standardContinuous = false
                 speech.stopContinuous()
 
-                _pipeline.update {
-                    it.copy(
-                        running = false,
-                        stage = "Iniciando separação local de falantes…",
-                        error = null
-                    )
-                }
+                _pipeline.value = _pipeline.value.copy(
+                    running = false,
+                    stage = "Iniciando Conversa V2…",
+                    error = null
+                )
 
-                advancedEngine.start()
+                advancedEngine.start(expectedSpeakers.value)
                     .onFailure { error ->
-                        _events.emit(error.message ?: "Falha ao iniciar o motor avançado")
+                        _events.emit(error.message ?: "Falha ao iniciar Conversa V2")
                         _pipeline.update {
                             it.copy(
                                 running = false,
@@ -221,7 +261,7 @@ class BudsIAViewModel @Inject constructor(
         }
 
         if (!speech.checkAvailability()) {
-            _events.tryEmit("O reconhecimento de voz local não está disponível neste aparelho.")
+            _events.tryEmit("O reconhecimento de voz local do Android não está disponível.")
             return
         }
 
@@ -238,12 +278,19 @@ class BudsIAViewModel @Inject constructor(
         standardContinuous = false
         speech.stopContinuous()
         viewModelScope.launch { advancedEngine.stop() }
-        _pipeline.value = _pipeline.value.copy(running = false, stage = "Parado", error = null)
+        _pipeline.value = _pipeline.value.copy(
+            running = false,
+            stage = "Parado",
+            error = null
+        )
     }
 
     fun clearSession() {
         _sessionItems.value = emptyList()
+        speakerLanguages.clear()
+        translationWarnings.clear()
         lastProcessedResultId = speech.state.value.resultId
+        currentSessionId = UUID.randomUUID().toString()
     }
 
     fun clearSavedTimeline() {
@@ -255,7 +302,7 @@ class BudsIAViewModel @Inject constructor(
 
     fun downloadModel(languageTag: String) {
         viewModelScope.launch {
-            _events.emit("Baixando modelo de tradução para $languageTag por Wi-Fi…")
+            _events.emit("Baixando modelo de tradução $languageTag por Wi-Fi…")
             language.downloadLanguageModel(languageTag)
                 .onSuccess {
                     _events.emit("Modelo de tradução $languageTag instalado.")
@@ -268,7 +315,7 @@ class BudsIAViewModel @Inject constructor(
     }
 
     fun downloadSpeechModel(languageTag: String) {
-        _events.tryEmit("Solicitando modelo de voz offline do Android para $languageTag…")
+        _events.tryEmit("Solicitando modelo de voz offline para $languageTag…")
         speech.downloadLanguageModel(languageTag)
     }
 
@@ -278,14 +325,14 @@ class BudsIAViewModel @Inject constructor(
 
     fun installAdvancedModels() {
         viewModelScope.launch {
-            _events.emit("Baixando os modelos avançados. O pacote é grande; mantenha o app aberto.")
+            _events.emit("Baixando o pacote V2. Mantenha o app aberto até terminar.")
             advancedModels.installAll()
                 .onSuccess {
-                    _events.emit("Modelos avançados instalados. Agora a separação de falantes pode ser testada offline.")
+                    _events.emit("Pacote Conversa V2 instalado com sucesso.")
                     refreshCapabilities()
                 }
                 .onFailure {
-                    _events.emit(it.message ?: "Falha ao instalar modelos avançados")
+                    _events.emit(it.message ?: "Falha ao instalar pacote V2")
                 }
         }
     }
@@ -296,18 +343,28 @@ class BudsIAViewModel @Inject constructor(
             advancedModels.removeAll()
             settings.setAdvancedSpeakerMode(false)
             refreshCapabilities()
-            _events.emit("Modelos avançados removidos.")
+            _events.emit("Pacote V2 removido.")
         }
     }
 
     fun setAdvancedSpeakerMode(value: Boolean) {
         if (value && !advancedModels.isReady()) {
-            _events.tryEmit("Instale primeiro os modelos avançados na tela Modelos.")
+            _events.tryEmit("Instale primeiro o pacote Conversa V2 em Modelos.")
             return
         }
         viewModelScope.launch {
             if (_pipeline.value.running) stopLive()
             settings.setAdvancedSpeakerMode(value)
+        }
+    }
+
+    fun setExpectedSpeakers(value: Int) {
+        viewModelScope.launch {
+            if (_pipeline.value.running) {
+                _events.emit("Altere o número de falantes com a sessão parada.")
+                return@launch
+            }
+            settings.setExpectedSpeakers(value)
         }
     }
 
@@ -327,87 +384,194 @@ class BudsIAViewModel @Inject constructor(
         viewModelScope.launch { settings.setTranslationMode(mode) }
     }
 
-    private suspend fun processStandardUtterance(text: String, confidence: Float?) {
-        val guess = runCatching { language.identifyWithConfidence(text) }
-            .getOrDefault(LanguageGuess(null, 0f))
-
-        val configuredSource = activeInputLanguageTag?.substringBefore('-')
-        val source = guess.languageTag?.substringBefore('-') ?: configuredSource
-
-        processConversationItem(
-            speakerLabel = "Falante A",
-            speakerSimilarity = null,
-            text = text,
-            sourceLanguage = source,
-            languageConfidence = guess.confidence,
-            recognitionConfidence = confidence
-        )
+    private fun beginSessionIfNeeded() {
+        if (_pipeline.value.running) return
+        currentSessionId = UUID.randomUUID().toString()
+        speakerLanguages.clear()
+        translationWarnings.clear()
+        _sessionItems.value = emptyList()
     }
 
-    private suspend fun processAdvancedUtterance(utterance: AdvancedUtterance) {
-        val whisperLanguage = utterance.languageTag?.substringBefore('-')
-        val fallbackGuess = if (whisperLanguage == null) {
-            runCatching { language.identifyWithConfidence(utterance.text) }
-                .getOrDefault(LanguageGuess(null, 0f))
-        } else null
-
-        processConversationItem(
-            speakerLabel = utterance.speakerLabel,
-            speakerSimilarity = utterance.speakerSimilarity,
-            text = utterance.text,
-            sourceLanguage = whisperLanguage ?: fallbackGuess?.languageTag,
-            languageConfidence = fallbackGuess?.confidence,
-            recognitionConfidence = null
-        )
-    }
-
-    private suspend fun processConversationItem(
-        speakerLabel: String,
-        speakerSimilarity: Float?,
+    private suspend fun processStandardUtterance(
         text: String,
-        sourceLanguage: String?,
-        languageConfidence: Float?,
-        recognitionConfidence: Float?
+        confidence: Float?
     ) {
-        _pipeline.update {
-            it.copy(stage = "Traduzindo", detectedLanguage = sourceLanguage, error = null)
+        val textGuess = runCatching {
+            language.identifyWithConfidence(text)
+        }.getOrDefault(LanguageGuess(null, 0f))
+
+        val configured = activeInputLanguageTag
+            ?.substringBefore('-')
+            ?.takeIf { it == "pt" || it == "en" }
+
+        val decision = if (configured != null) {
+            LanguageDecision(
+                languageTag = configured,
+                confidence = maxOf(textGuess.confidence, 0.80f),
+                reason = "idioma selecionado na entrada"
+            )
+        } else {
+            bilingualResolver.resolve(
+                whisperLanguage = null,
+                textGuess = textGuess,
+                speakerPrior = null
+            )
         }
 
-        val route = TranslationRouter.route(translationMode.value, sourceLanguage)
+        persistConversationSegment(
+            timestamp = System.currentTimeMillis(),
+            speakerLabel = "Falante único",
+            speakerConfidence = null,
+            speakerStable = false,
+            text = text,
+            languageDecision = decision,
+            recognitionConfidence = confidence,
+            transcriptQuality = 1f,
+            transcriptQualityReason = "SpeechRecognizer do Android",
+            durationMs = null,
+            engine = ConversationEngine.ANDROID_COMPAT
+        )
+    }
 
-        val translated = when {
-            !route.shouldTranslate || route.sourceTag == null || route.targetTag == null -> null
-            route.sourceTag == route.targetTag -> text
-            else -> {
-                language.translate(
-                    text = text,
-                    sourceTag = route.sourceTag,
-                    targetTag = route.targetTag,
-                    allowModelDownload = false
-                ).getOrElse {
-                    _events.tryEmit(it.message ?: "Tradução indisponível")
-                    null
+    private suspend fun processAdvancedUtterance(
+        utterance: AdvancedUtterance
+    ) {
+        val textGuess = runCatching {
+            language.identifyWithConfidence(utterance.text)
+        }.getOrDefault(LanguageGuess(null, 0f))
+
+        val prior = if (utterance.speakerStable && utterance.speakerLabel != "Falante ?") {
+            speakerLanguages[utterance.speakerLabel]?.dominant()
+        } else {
+            null
+        }
+
+        val decision = bilingualResolver.resolve(
+            whisperLanguage = utterance.whisperLanguageTag,
+            textGuess = textGuess,
+            speakerPrior = prior
+        )
+
+        if (
+            utterance.speakerStable &&
+            utterance.speakerLabel != "Falante ?" &&
+            decision.languageTag != null &&
+            decision.confidence >= 0.62f
+        ) {
+            val memory = speakerLanguages.getOrPut(utterance.speakerLabel) {
+                SpeakerLanguageMemory()
+            }
+            memory.add(decision.languageTag, decision.confidence)
+        }
+
+        persistConversationSegment(
+            timestamp = utterance.timestamp,
+            speakerLabel = utterance.speakerLabel,
+            speakerConfidence = utterance.speakerConfidence,
+            speakerStable = utterance.speakerStable,
+            text = utterance.text,
+            languageDecision = decision,
+            recognitionConfidence = null,
+            transcriptQuality = utterance.transcriptQualityScore,
+            transcriptQualityReason = utterance.transcriptQualityReason,
+            durationMs = utterance.durationMs,
+            engine = ConversationEngine.LOCAL_V2
+        )
+    }
+
+    private suspend fun persistConversationSegment(
+        timestamp: Long,
+        speakerLabel: String,
+        speakerConfidence: Float?,
+        speakerStable: Boolean,
+        text: String,
+        languageDecision: LanguageDecision,
+        recognitionConfidence: Float?,
+        transcriptQuality: Float,
+        transcriptQualityReason: String,
+        durationMs: Long?,
+        engine: ConversationEngine
+    ) {
+        _pipeline.update {
+            it.copy(
+                stage = "Analisando idioma…",
+                detectedLanguage = languageDecision.languageTag,
+                error = null
+            )
+        }
+
+        val route = TranslationRouter.route(
+            translationMode.value,
+            languageDecision.languageTag
+        )
+
+        var translated: String? = null
+        var translationStatus = when {
+            languageDecision.languageTag == null -> "LANGUAGE_UNCERTAIN"
+            !route.shouldTranslate -> "NOT_APPLICABLE"
+            transcriptQuality < 0.50f -> "TRANSCRIPT_UNCERTAIN"
+            else -> "PENDING"
+        }
+
+        if (translationStatus == "PENDING") {
+            _pipeline.update { it.copy(stage = "Traduzindo…") }
+
+            translated = language.translate(
+                text = text,
+                sourceTag = route.sourceTag!!,
+                targetTag = route.targetTag!!,
+                allowModelDownload = false
+            ).getOrElse {
+                val key = route.sourceTag + "->" + route.targetTag
+                if (translationWarnings.add(key)) {
+                    _events.tryEmit(
+                        "Tradução " + route.sourceTag.uppercase() +
+                            " → " + route.targetTag.uppercase() +
+                            " indisponível. Verifique os modelos em Modelos."
+                    )
                 }
+                translationStatus = "MODEL_MISSING"
+                null
+            }
+
+            if (translated != null) {
+                translationStatus = "OK"
             }
         }
 
-        _pipeline.update { it.copy(stage = "Analisando") }
-        val signals = analyzer.analyze(text)
+        _pipeline.update { it.copy(stage = "Analisando conversa…") }
+
+        val signals = if (transcriptQuality >= 0.50f) {
+            analyzer.analyze(text)
+        } else {
+            emptyList()
+        }
 
         val item = ConversationItem(
+            sessionId = currentSessionId,
+            timestamp = timestamp,
             speakerLabel = speakerLabel,
-            speakerSimilarity = speakerSimilarity,
+            speakerSimilarity = speakerConfidence,
+            speakerStable = speakerStable,
             originalText = text,
-            languageTag = route.sourceTag ?: sourceLanguage,
-            languageConfidence = languageConfidence,
+            languageTag = languageDecision.languageTag,
+            languageConfidence = languageDecision.confidence,
+            languageReason = languageDecision.reason,
             translationTargetTag = route.targetTag,
             translatedText = translated,
+            translationStatus = translationStatus,
             recognitionConfidence = recognitionConfidence,
+            transcriptQuality = transcriptQuality,
+            transcriptQualityReason = transcriptQualityReason,
+            durationMs = durationMs,
+            engine = engine,
             signals = signals
         )
 
         _sessionItems.update { (it + item).takeLast(300) }
-        if (saveTranscript.value) conversations.insert(item)
+        if (saveTranscript.value) {
+            conversations.insert(item)
+        }
 
         val running = standardContinuous || advancedSpeakerState.value.running
         _pipeline.value = _pipeline.value.copy(
