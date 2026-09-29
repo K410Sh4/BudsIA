@@ -189,7 +189,7 @@ class BudsIAViewModel @Inject constructor(
                 text = text,
                 sourceTag = detected,
                 targetTag = target,
-                allowModelDownload = !strictOffline.value
+                allowModelDownload = false
             ).getOrElse {
                 _events.tryEmit(it.message ?: "Translation unavailable")
                 null
