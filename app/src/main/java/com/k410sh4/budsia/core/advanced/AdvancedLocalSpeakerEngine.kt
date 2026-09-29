@@ -316,7 +316,7 @@ class AdvancedLocalSpeakerEngine @Inject constructor(
 
             if (quality.level == TranscriptQualityLevel.REJECTED) continue
 
-            val embedding = if (quality.level == TranscriptQualityLevel.GOOD || durationMs >= 1_500L) {
+            val embedding = if (quality.level == TranscriptQualityLevel.GOOD) {
                 computeSpeakerEmbedding(audio)
             } else {
                 null
