@@ -28,6 +28,8 @@ class ConversationRepository @Inject constructor(
         speakerLabel = speakerLabel,
         originalText = originalText,
         languageTag = languageTag,
+        languageConfidence = languageConfidence,
+        translationTargetTag = translationTargetTag,
         translatedText = translatedText,
         recognitionConfidence = recognitionConfidence,
         signals = decodeSignals(signalsJson)
@@ -39,6 +41,8 @@ class ConversationRepository @Inject constructor(
         speakerLabel = speakerLabel,
         originalText = originalText,
         languageTag = languageTag,
+        languageConfidence = languageConfidence,
+        translationTargetTag = translationTargetTag,
         translatedText = translatedText,
         recognitionConfidence = recognitionConfidence,
         signalsJson = encodeSignals(signals)
