@@ -2,11 +2,13 @@ package com.k410sh4.budsia.core.language
 
 import com.google.mlkit.common.model.DownloadConditions
 import com.google.mlkit.common.model.RemoteModelManager
+import com.google.mlkit.nl.languageid.IdentifiedLanguage
 import com.google.mlkit.nl.languageid.LanguageIdentification
 import com.google.mlkit.nl.translate.TranslateLanguage
 import com.google.mlkit.nl.translate.TranslateRemoteModel
 import com.google.mlkit.nl.translate.Translation
 import com.google.mlkit.nl.translate.TranslatorOptions
+import com.k410sh4.budsia.domain.model.LanguageGuess
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -18,14 +20,30 @@ class LocalLanguageEngine @Inject constructor() {
     private val identifier = LanguageIdentification.getClient()
     private val modelManager = RemoteModelManager.getInstance()
 
-    suspend fun identify(text: String): String? {
-        if (text.isBlank()) return null
-        val tag = awaitTask<String> { ok, fail ->
-            identifier.identifyLanguage(text)
+    suspend fun identify(text: String): String? =
+        identifyWithConfidence(text).languageTag
+
+    suspend fun identifyWithConfidence(
+        text: String,
+        minimumConfidence: Float = 0.55f
+    ): LanguageGuess {
+        if (text.isBlank()) return LanguageGuess(null, 0f)
+
+        val candidates = awaitTask<List<IdentifiedLanguage>> { ok, fail ->
+            identifier.identifyPossibleLanguages(text)
                 .addOnSuccessListener(ok)
                 .addOnFailureListener(fail)
         }
-        return tag.takeUnless { it == "und" }
+
+        val best = candidates
+            .filter { it.languageTag != "und" }
+            .maxByOrNull { it.confidence }
+
+        return if (best == null || best.confidence < minimumConfidence) {
+            LanguageGuess(null, best?.confidence ?: 0f)
+        } else {
+            LanguageGuess(best.languageTag, best.confidence)
+        }
     }
 
     suspend fun downloadedLanguages(): Set<String> {
