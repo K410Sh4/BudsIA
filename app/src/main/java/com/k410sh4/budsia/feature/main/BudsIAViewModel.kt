@@ -31,6 +31,8 @@ class BudsIAViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
     val targetLanguage = settings.targetLanguage
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "pt")
+    val translationMode = settings.translationMode
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TranslationMode.AUTO_PT_EN)
 
     private val _pipeline = MutableStateFlow(LivePipelineState())
     val pipeline: StateFlow<LivePipelineState> = _pipeline.asStateFlow()
@@ -212,55 +214,51 @@ class BudsIAViewModel @Inject constructor(
         viewModelScope.launch { settings.setTargetLanguage(tag) }
     }
 
+    fun setTranslationMode(mode: TranslationMode) {
+        viewModelScope.launch { settings.setTranslationMode(mode) }
+    }
+
     private suspend fun processRecognizedText(text: String, confidence: Float?) {
-        _pipeline.value = _pipeline.value.copy(stage = "Language ID", error = null)
+        _pipeline.value = _pipeline.value.copy(stage = "Identificando idioma", error = null)
 
         val guess = runCatching { language.identifyWithConfidence(text) }
             .getOrDefault(LanguageGuess(null, 0f))
 
         val configuredSource = activeInputLanguageTag?.substringBefore('-')
-        val highConfidenceDetected = guess.languageTag?.takeIf { guess.confidence >= 0.80f }
-
-        val sourceForTranslation = highConfidenceDetected
-            ?: configuredSource
-            ?: guess.languageTag
-
-        val displayedLanguage = guess.languageTag
-            ?: configuredSource
-
-        val target = targetLanguage.value
+        val detected = guess.languageTag?.substringBefore('-')
+        val sourceForRouting = detected ?: configuredSource
+        val route = TranslationRouter.route(translationMode.value, sourceForRouting)
 
         _pipeline.value = _pipeline.value.copy(
-            stage = "Translation",
-            detectedLanguage = displayedLanguage
+            stage = "Traduzindo",
+            detectedLanguage = sourceForRouting
         )
 
         val translated = when {
-            sourceForTranslation == null -> {
-                _events.tryEmit("Language confidence too low; translation skipped for this segment.")
-                null
-            }
-            sourceForTranslation == target -> text
+            !route.shouldTranslate || route.sourceTag == null || route.targetTag == null -> null
+            route.sourceTag == route.targetTag -> text
             else -> {
                 language.translate(
                     text = text,
-                    sourceTag = sourceForTranslation,
-                    targetTag = target,
+                    sourceTag = route.sourceTag,
+                    targetTag = route.targetTag,
                     allowModelDownload = false
                 ).getOrElse {
-                    _events.tryEmit(it.message ?: "Translation unavailable")
+                    _events.tryEmit(it.message ?: "Tradução indisponível")
                     null
                 }
             }
         }
 
-        _pipeline.value = _pipeline.value.copy(stage = "Analysis")
+        _pipeline.value = _pipeline.value.copy(stage = "Analisando")
         val signals = analyzer.analyze(text)
 
         val item = ConversationItem(
-            speakerLabel = "Speaker A",
+            speakerLabel = "Falante A",
             originalText = text,
-            languageTag = displayedLanguage,
+            languageTag = sourceForRouting,
+            languageConfidence = guess.confidence,
+            translationTargetTag = route.targetTag,
             translatedText = translated,
             recognitionConfidence = confidence,
             signals = signals
@@ -271,9 +269,9 @@ class BudsIAViewModel @Inject constructor(
 
         _pipeline.value = _pipeline.value.copy(
             running = continuous,
-            stage = if (continuous) "Listening" else "Idle",
-            detectedLanguage = displayedLanguage,
-            translationTarget = target,
+            stage = if (continuous) "Escutando" else "Parado",
+            detectedLanguage = sourceForRouting,
+            translationTarget = route.targetTag ?: "",
             lastItem = item,
             error = null
         )
