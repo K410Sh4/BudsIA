@@ -20,10 +20,14 @@ class PrivacySettings @Inject constructor(
     private val saveTranscriptKey = booleanPreferencesKey("save_transcript")
     private val targetLanguageKey = stringPreferencesKey("target_language")
     private val translationModeKey = stringPreferencesKey("translation_mode")
+    private val advancedSpeakerModeKey = booleanPreferencesKey("advanced_speaker_mode")
 
     val strictOffline: Flow<Boolean> = context.dataStore.data.map { it[strictOfflineKey] ?: true }
     val saveTranscript: Flow<Boolean> = context.dataStore.data.map { it[saveTranscriptKey] ?: true }
     val targetLanguage: Flow<String> = context.dataStore.data.map { it[targetLanguageKey] ?: "pt" }
+    val advancedSpeakerMode: Flow<Boolean> =
+        context.dataStore.data.map { it[advancedSpeakerModeKey] ?: false }
+
     val translationMode: Flow<TranslationMode> = context.dataStore.data.map {
         runCatching {
             TranslationMode.valueOf(it[translationModeKey] ?: TranslationMode.AUTO_PT_EN.name)
@@ -44,5 +48,9 @@ class PrivacySettings @Inject constructor(
 
     suspend fun setTranslationMode(value: TranslationMode) {
         context.dataStore.edit { it[translationModeKey] = value.name }
+    }
+
+    suspend fun setAdvancedSpeakerMode(value: Boolean) {
+        context.dataStore.edit { it[advancedSpeakerModeKey] = value }
     }
 }
