@@ -17,7 +17,7 @@ The application is designed so that unsupported or unfinished AI features are ne
 
 ## Current version
 
-**0.2.0-alpha**
+**0.3.0-alpha**
 
 Implemented now:
 
@@ -186,7 +186,16 @@ Controls:
 
 Speech → language ID → translation → explainable rule analysis → timeline.
 
-### V0.2 — current stabilization
+### V0.3 — current
+
+- interface em português
+- tradução bidirecional automática PT ↔ EN por trecho
+- direção PT → EN / EN → PT visível em cada cartão
+- confiança do idioma exibida
+- metadados de idioma e direção salvos por trecho
+- estrutura pronta para aplicar idioma/tradução por falante quando a diarização estiver ativa
+
+### V0.2 — stabilization
 
 - continuous SpeechRecognizer lifecycle recovery
 - Android offline speech model manager
