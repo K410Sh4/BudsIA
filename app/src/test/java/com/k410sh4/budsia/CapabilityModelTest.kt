@@ -8,8 +8,8 @@ class CapabilityModelTest {
     @Test
     fun unfinishedFeaturesAreNotMarkedReady() {
         val capabilities = AiCapabilities()
-        assertEquals(AiCapabilityState.PLANNED, capabilities.speakerDiarization.state)
-        assertEquals(AiCapabilityState.PLANNED, capabilities.speakerIdentification.state)
+        assertEquals(AiCapabilityState.DOWNLOAD_REQUIRED, capabilities.speakerDiarization.state)
+        assertEquals(AiCapabilityState.EXPERIMENTAL, capabilities.speakerIdentification.state)
         assertEquals(AiCapabilityState.PLANNED, capabilities.localLlm.state)
         assertEquals(AiCapabilityState.EXPERIMENTAL, capabilities.discourseAnalysis.state)
     }
