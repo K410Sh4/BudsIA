@@ -277,7 +277,7 @@ class AdvancedLocalSpeakerEngine @Inject constructor(
                 _state.update {
                     it.copy(
                         stage = "Erro de processamento",
-                        error = it.message ?: "Erro no pipeline de conversação V2"
+                        error = t.message ?: "Erro no pipeline de conversação V2"
                     )
                 }
             }
