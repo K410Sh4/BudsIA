@@ -16,10 +16,12 @@ import androidx.compose.ui.*
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.*
 import androidx.core.content.ContextCompat
 import androidx.navigation.compose.*
+import com.k410sh4.budsia.R
 import com.k410sh4.budsia.domain.model.*
 import com.k410sh4.budsia.feature.main.BudsIAViewModel
 import com.k410sh4.budsia.ui.theme.*
@@ -91,8 +93,7 @@ private fun HomeScreen(vm: BudsIAViewModel, openLive: () -> Unit) {
         item {
             HeroCard(
                 title = if (strictOffline) "LOCAL-FIRST MODE" else "LOCAL MODE",
-                subtitle = "Speech → language → translation → explainable analysis",
-                icon = Icons.Rounded.Psychology
+                subtitle = "Speech → language → translation → explainable analysis"
             )
         }
         item {
@@ -138,6 +139,7 @@ private fun LiveScreen(vm: BudsIAViewModel) {
     val pipeline by vm.pipeline.collectAsState()
     val session by vm.sessionItems.collectAsState()
     val target by vm.targetLanguage.collectAsState()
+    val speechModels by vm.speechLanguageModels.collectAsState()
     var inputLanguage by remember { mutableStateOf("system") }
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -181,8 +183,16 @@ private fun LiveScreen(vm: BudsIAViewModel) {
                         )
                     }
                 }
+                val selectedTag = inputLanguage.takeUnless { it == "system" }
+                val model = selectedTag?.let { speechModels[it] }
+                Spacer(Modifier.height(4.dp))
+                if (selectedTag != null && model != null) {
+                    SpeechModelStatusRow(model) {
+                        vm.downloadSpeechModel(selectedTag)
+                    }
+                }
                 Text(
-                    "Automatic language identification happens after transcription. Speech-language auto-switching is planned for the advanced local speech pipeline.",
+                    "Language ID now uses a confidence threshold after transcription. Explicit PT/EN/ES selection also tells Android which offline speech model to use.",
                     color = TextMuted,
                     style = MaterialTheme.typography.bodySmall
                 )
@@ -225,11 +235,34 @@ private fun LiveScreen(vm: BudsIAViewModel) {
                 }
             }
         }
-        speech.error?.let { error ->
+        if (speech.statusMessage != null || speech.error != null) {
             item {
                 GlassCard {
-                    Text("Speech status", color = Red, fontWeight = FontWeight.Bold)
-                    Text(error, color = TextMuted)
+                    Text(
+                        if (speech.error != null) "Speech status" else "Speech engine",
+                        color = if (speech.error != null) Red else Cyan,
+                        fontWeight = FontWeight.Bold
+                    )
+                    speech.statusMessage?.let { Text(it, color = TextMuted) }
+                    speech.error?.let { Text(it, color = TextMuted) }
+                    if (speech.modelDownloadRequired && speech.requestedLanguage != null) {
+                        Spacer(Modifier.height(10.dp))
+                        Button(
+                            onClick = { vm.downloadSpeechModel(speech.requestedLanguage!!) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Rounded.Download, null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("INSTALL OFFLINE SPEECH MODEL")
+                        }
+                    }
+                    speech.modelDownloadProgress?.let { progress ->
+                        Spacer(Modifier.height(8.dp))
+                        LinearProgressIndicator(
+                            progress = { progress / 100f },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                 }
             }
         }
@@ -279,9 +312,39 @@ private fun TimelineScreen(vm: BudsIAViewModel) {
 private fun ModelsScreen(vm: BudsIAViewModel) {
     val downloaded by vm.downloadedLanguages.collectAsState()
     val capabilities by vm.capabilities.collectAsState()
+    val speechModels by vm.speechLanguageModels.collectAsState()
 
     ScreenList("Offline Models", "Downloads only happen when you explicitly request them") {
         item { CapabilityCard(capabilities.onDeviceSpeech) }
+        item {
+            GlassCard {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Offline speech models", fontWeight = FontWeight.Bold)
+                    TextButton(onClick = vm::refreshSpeechModels) {
+                        Icon(Icons.Rounded.Refresh, null)
+                        Spacer(Modifier.width(4.dp))
+                        Text("Refresh")
+                    }
+                }
+                listOf(
+                    "pt-BR" to "Português (Brasil)",
+                    "en-US" to "English (US)",
+                    "es-ES" to "Español"
+                ).forEach { (tag, name) ->
+                    Spacer(Modifier.height(6.dp))
+                    Text(name, fontWeight = FontWeight.Medium)
+                    SpeechModelStatusRow(
+                        speechModels[tag] ?: SpeechLanguageModelState(tag)
+                    ) {
+                        vm.downloadSpeechModel(tag)
+                    }
+                }
+            }
+        }
         item { CapabilityCard(capabilities.languageId) }
         item { CapabilityCard(capabilities.translation) }
         item {
@@ -456,21 +519,67 @@ private fun CapabilityStatePill(capability: AiCapability) {
 }
 
 @Composable
-private fun HeroCard(title: String, subtitle: String, icon: androidx.compose.ui.graphics.vector.ImageVector) {
+private fun HeroCard(title: String, subtitle: String) {
     Surface(
         color = Color.White.copy(alpha = .055f),
         border = BorderStroke(1.dp, Cyan.copy(alpha = .16f)),
         shape = RoundedCornerShape(28.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Row(Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
-            Surface(color = Cyan.copy(alpha = .12f), shape = RoundedCornerShape(20.dp)) {
-                Icon(icon, null, tint = Cyan, modifier = Modifier.padding(16.dp).size(34.dp))
+        Row(
+            Modifier.padding(18.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                color = Color(0xFF071018),
+                shape = RoundedCornerShape(24.dp),
+                border = BorderStroke(1.dp, Cyan.copy(alpha = .16f))
+            ) {
+                Image(
+                    painter = painterResource(R.drawable.budsia_logo),
+                    contentDescription = "BudsIA logo",
+                    modifier = Modifier.padding(4.dp).size(88.dp)
+                )
             }
             Spacer(Modifier.width(16.dp))
             Column {
+                Text("BudsIA", color = Cyan, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
                 Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
-                Text(subtitle, color = TextMuted)
+                Text(subtitle, color = TextMuted, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SpeechModelStatusRow(
+    model: SpeechLanguageModelState,
+    onDownload: () -> Unit
+) {
+    val (label, color) = when (model.status) {
+        SpeechLanguageStatus.INSTALLED -> "INSTALLED" to Green
+        SpeechLanguageStatus.DOWNLOAD_REQUIRED -> "DOWNLOAD" to Amber
+        SpeechLanguageStatus.PENDING -> "PENDING" to Cyan
+        SpeechLanguageStatus.UNSUPPORTED -> "UNSUPPORTED" to Red
+        SpeechLanguageStatus.UNKNOWN -> "UNKNOWN" to TextMuted
+    }
+
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(label, color = color, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+            if (model.detail.isNotBlank()) {
+                Text(model.detail, color = TextMuted, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        if (model.status == SpeechLanguageStatus.DOWNLOAD_REQUIRED ||
+            model.status == SpeechLanguageStatus.UNKNOWN) {
+            OutlinedButton(onClick = onDownload) {
+                Icon(Icons.Rounded.Download, null)
+                Spacer(Modifier.width(4.dp))
+                Text("Install")
             }
         }
     }
