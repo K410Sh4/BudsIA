@@ -1,6 +1,8 @@
 package com.k410sh4.budsia.data.database
 
 import androidx.room.*
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 @Entity(tableName = "conversation_item")
@@ -37,4 +39,19 @@ interface ConversationDao {
 )
 abstract class BudsIADatabase : RoomDatabase() {
     abstract fun conversationDao(): ConversationDao
+
+    companion object {
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE conversation_item ADD COLUMN languageConfidence REAL")
+                db.execSQL("ALTER TABLE conversation_item ADD COLUMN translationTargetTag TEXT")
+            }
+        }
+
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE conversation_item ADD COLUMN speakerSimilarity REAL")
+            }
+        }
+    }
 }
