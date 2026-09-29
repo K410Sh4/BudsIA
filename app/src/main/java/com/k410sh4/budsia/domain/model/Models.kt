@@ -17,39 +17,39 @@ data class AiCapability(
 
 data class AiCapabilities(
     val onDeviceSpeech: AiCapability = AiCapability(
-        "On-device speech",
+        "Reconhecimento de voz local",
         AiCapabilityState.UNAVAILABLE,
-        "Not checked yet"
+        "Ainda não verificado"
     ),
     val languageId: AiCapability = AiCapability(
-        "Language identification",
+        "Identificação de idioma",
         AiCapabilityState.READY,
-        "Bundled ML Kit model"
+        "ML Kit local"
     ),
     val translation: AiCapability = AiCapability(
-        "Offline translation",
+        "Tradução offline",
         AiCapabilityState.DOWNLOAD_REQUIRED,
-        "Language models are downloaded on demand"
+        "Modelos baixados sob demanda"
     ),
     val speakerDiarization: AiCapability = AiCapability(
-        "Speaker diarization",
-        AiCapabilityState.PLANNED,
-        "Local sherpa-onnx pipeline planned"
+        "Diarização de falantes",
+        AiCapabilityState.DOWNLOAD_REQUIRED,
+        "Motor V2 opcional"
     ),
     val speakerIdentification: AiCapability = AiCapability(
-        "Speaker identification",
-        AiCapabilityState.PLANNED,
-        "Local voice embeddings planned"
+        "Identidade de voz",
+        AiCapabilityState.EXPERIMENTAL,
+        "Perfis temporários por sessão"
     ),
     val localLlm: AiCapability = AiCapability(
-        "Local LLM",
+        "LLM local",
         AiCapabilityState.PLANNED,
-        "Gemini Nano when available; LiteRT-LM fallback planned"
+        "Camada futura"
     ),
     val discourseAnalysis: AiCapability = AiCapability(
-        "Discourse analysis",
+        "Análise discursiva",
         AiCapabilityState.EXPERIMENTAL,
-        "V0.1 uses transparent local rules, not hidden-intent claims"
+        "Regras explicáveis"
     )
 )
 
@@ -92,29 +92,41 @@ object TranslationRouter {
     fun route(mode: TranslationMode, detectedLanguage: String?): TranslationRoute {
         val lang = detectedLanguage?.substringBefore('-')?.lowercase()
         return when (mode) {
-            TranslationMode.PT_TO_EN -> TranslationRoute("pt", "en", lang == null || lang == "pt")
-            TranslationMode.EN_TO_PT -> TranslationRoute("en", "pt", lang == null || lang == "en")
+            TranslationMode.PT_TO_EN -> TranslationRoute("pt", "en", lang == "pt")
+            TranslationMode.EN_TO_PT -> TranslationRoute("en", "pt", lang == "en")
             TranslationMode.AUTO_PT_EN -> when (lang) {
                 "pt" -> TranslationRoute("pt", "en", true)
                 "en" -> TranslationRoute("en", "pt", true)
-                null -> TranslationRoute(null, null, false)
-                else -> TranslationRoute(lang, "pt", true)
+                else -> TranslationRoute(null, null, false)
             }
         }
     }
 }
 
+enum class ConversationEngine {
+    ANDROID_COMPAT,
+    LOCAL_V2
+}
+
 data class ConversationItem(
     val id: Long = 0,
+    val sessionId: String = "",
     val timestamp: Long = System.currentTimeMillis(),
-    val speakerLabel: String = "Falante A",
+    val speakerLabel: String = "Falante ?",
     val speakerSimilarity: Float? = null,
+    val speakerStable: Boolean = false,
     val originalText: String,
     val languageTag: String? = null,
     val languageConfidence: Float? = null,
+    val languageReason: String? = null,
     val translationTargetTag: String? = null,
     val translatedText: String? = null,
+    val translationStatus: String = "NONE",
     val recognitionConfidence: Float? = null,
+    val transcriptQuality: Float? = null,
+    val transcriptQualityReason: String? = null,
+    val durationMs: Long? = null,
+    val engine: ConversationEngine = ConversationEngine.ANDROID_COMPAT,
     val signals: List<AnalysisSignal> = emptyList()
 )
 
@@ -150,9 +162,9 @@ data class SpeechState(
 
 data class LivePipelineState(
     val running: Boolean = false,
-    val stage: String = "Idle",
+    val stage: String = "Parado",
     val detectedLanguage: String? = null,
-    val translationTarget: String = "pt",
+    val translationTarget: String = "",
     val lastItem: ConversationItem? = null,
     val error: String? = null
 )
@@ -168,7 +180,8 @@ data class AdvancedModelState(
     val status: AdvancedModelStatus = AdvancedModelStatus.NOT_INSTALLED,
     val currentFile: String? = null,
     val progress: Float = 0f,
-    val message: String = "Modelos avançados não instalados"
+    val message: String = "Pacote de conversação V2 não instalado",
+    val installedVariant: String? = null
 )
 
 data class AdvancedSpeakerState(
@@ -176,14 +189,24 @@ data class AdvancedSpeakerState(
     val running: Boolean = false,
     val modelState: AdvancedModelState = AdvancedModelState(),
     val speakerCount: Int = 0,
+    val expectedSpeakers: Int = 0,
+    val processedWindows: Int = 0,
+    val droppedWindows: Int = 0,
+    val lastProcessingMs: Long? = null,
     val stage: String = "Parado",
     val error: String? = null
 )
 
 data class AdvancedUtterance(
+    val timestamp: Long,
     val speakerLabel: String,
+    val speakerConfidence: Float?,
+    val speakerStable: Boolean,
     val text: String,
-    val languageTag: String?,
-    val speakerSimilarity: Float?,
-    val durationMs: Long
+    val whisperLanguageTag: String?,
+    val diarizationConfidence: Float,
+    val transcriptQualityScore: Float,
+    val transcriptQualityReason: String,
+    val durationMs: Long,
+    val rms: Float
 )
