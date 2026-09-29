@@ -4,7 +4,9 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.*
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -12,13 +14,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.*
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.navigation.compose.*
 import com.k410sh4.budsia.R
@@ -31,7 +34,7 @@ import java.util.*
 private object Routes {
     const val HOME = "home"
     const val LIVE = "live"
-    const val TIMELINE = "timeline"
+    const val HISTORY = "history"
     const val MODELS = "models"
     const val PRIVACY = "privacy"
 }
@@ -41,25 +44,27 @@ fun BudsIAAppRoot(vm: BudsIAViewModel) {
     val nav = rememberNavController()
     val snackbar = remember { SnackbarHostState() }
 
-    LaunchedEffect(Unit) { vm.events.collect { snackbar.showSnackbar(it) } }
+    LaunchedEffect(Unit) {
+        vm.events.collect { snackbar.showSnackbar(it) }
+    }
 
     Scaffold(
         containerColor = Ink,
         snackbarHost = { SnackbarHost(snackbar) },
         bottomBar = {
-            NavigationBar(containerColor = Panel.copy(alpha = .96f)) {
+            NavigationBar(containerColor = Panel.copy(alpha = .97f)) {
                 val entry by nav.currentBackStackEntryAsState()
                 val route = entry?.destination?.route
                 listOf(
                     Triple(Routes.HOME, "Início", Icons.Rounded.Home),
-                    Triple(Routes.LIVE, "Ao vivo", Icons.Rounded.GraphicEq),
-                    Triple(Routes.TIMELINE, "Histórico", Icons.Rounded.History),
+                    Triple(Routes.LIVE, "Conversa", Icons.Rounded.GraphicEq),
+                    Triple(Routes.HISTORY, "Histórico", Icons.Rounded.History),
                     Triple(Routes.MODELS, "Modelos", Icons.Rounded.Memory),
                     Triple(Routes.PRIVACY, "Privacidade", Icons.Rounded.Shield)
-                ).forEach { (r, label, icon) ->
+                ).forEach { (target, label, icon) ->
                     NavigationBarItem(
-                        selected = route == r,
-                        onClick = { nav.navigate(r) { launchSingleTop = true } },
+                        selected = route == target,
+                        onClick = { nav.navigate(target) { launchSingleTop = true } },
                         icon = { Icon(icon, null) },
                         label = { Text(label) }
                     )
@@ -67,10 +72,14 @@ fun BudsIAAppRoot(vm: BudsIAViewModel) {
             }
         }
     ) { padding ->
-        NavHost(navController = nav, startDestination = Routes.HOME, modifier = Modifier.padding(padding)) {
+        NavHost(
+            navController = nav,
+            startDestination = Routes.HOME,
+            modifier = Modifier.padding(padding)
+        ) {
             composable(Routes.HOME) { HomeScreen(vm) { nav.navigate(Routes.LIVE) } }
             composable(Routes.LIVE) { LiveScreen(vm) }
-            composable(Routes.TIMELINE) { TimelineScreen(vm) }
+            composable(Routes.HISTORY) { HistoryScreen(vm) }
             composable(Routes.MODELS) { ModelsScreen(vm) }
             composable(Routes.PRIVACY) { PrivacyScreen(vm) }
         }
@@ -80,46 +89,48 @@ fun BudsIAAppRoot(vm: BudsIAViewModel) {
 @Composable
 private fun HomeScreen(vm: BudsIAViewModel, openLive: () -> Unit) {
     val capabilities by vm.capabilities.collectAsState()
-    val strictOffline by vm.strictOffline.collectAsState()
-    val pipeline by vm.pipeline.collectAsState()
-    val mode by vm.translationMode.collectAsState()
+    val model by vm.advancedModelState.collectAsState()
+    val advanced by vm.advancedSpeakerMode.collectAsState()
+    val translationMode by vm.translationMode.collectAsState()
 
-    ScreenList("BudsIA", "Inteligência local para conversas") {
+    Page("BudsIA V2", "Reconstruído com os aprendizados da primeira versão") {
         item {
             HeroCard(
-                title = if (strictOffline) "MODO LOCAL OFFLINE" else "MODO LOCAL",
-                subtitle = "Voz → idioma → tradução → análise explicável"
+                if (model.status == AdvancedModelStatus.READY)
+                    "Conversa local com diarização, idioma e tradução"
+                else
+                    "Instale o pacote Conversa V2 para liberar a IA completa"
             )
         }
         item {
             GlassCard {
-                ValueRow("Sessão", if (pipeline.running) "AO VIVO" else "PARADA")
-                ValueRow("Offline rígido", if (strictOffline) "ATIVO" else "DESATIVADO")
-                ValueRow("Etapa", pipeline.stage)
-                ValueRow("Tradução", translationModeLabel(mode))
+                ValueRow("Motor", if (advanced) "Conversa V2" else "Compatibilidade Android")
+                ValueRow("Tradução", translationModeLabel(translationMode))
+                ValueRow("Pacote V2", modelStatusLabel(model.status))
             }
         }
         item {
             Button(
                 onClick = openLive,
-                modifier = Modifier.fillMaxWidth().height(56.dp),
+                modifier = Modifier.fillMaxWidth().height(58.dp),
                 shape = RoundedCornerShape(18.dp)
             ) {
                 Icon(Icons.Rounded.Mic, null)
                 Spacer(Modifier.width(8.dp))
-                Text("ABRIR CONVERSA AO VIVO", fontWeight = FontWeight.Bold)
+                Text("ABRIR CONVERSA", fontWeight = FontWeight.Bold)
             }
         }
-        item { SectionTitle("Capacidades da IA") }
+        item { SectionTitle("Estado dos recursos") }
         items(capabilities.asList()) { CapabilityCard(it) }
         item {
             GlassCard {
-                Text("Transparência", fontWeight = FontWeight.Bold)
+                Text("Principais correções da V2", fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(8.dp))
-                Text(
-                    "A análise de falácias e pressão ainda usa regras locais explicáveis. A diarização real de falantes exige uma nova captura de áudio local e está sendo preparada separadamente — o app não finge reconhecer pessoas enquanto isso não estiver validado.",
-                    color = TextMuted
-                )
+                Text("• Não cria um novo falante por causa de uma frase curta.", color = TextMuted)
+                Text("• Identidade ambígua vira “Falante ?” e não é forçada.", color = TextMuted)
+                Text("• Idioma fora de PT/EN não dispara tradução aleatória.", color = TextMuted)
+                Text("• Trechos repetitivos, silenciosos ou muito curtos são filtrados.", color = TextMuted)
+                Text("• Pyannote separa turnos antes da identidade de voz.", color = TextMuted)
             }
         }
     }
@@ -131,31 +142,23 @@ private fun LiveScreen(vm: BudsIAViewModel) {
     val speech by vm.speechState.collectAsState()
     val pipeline by vm.pipeline.collectAsState()
     val session by vm.sessionItems.collectAsState()
-    val speechModels by vm.speechLanguageModels.collectAsState()
-    val translationMode by vm.translationMode.collectAsState()
     val advancedMode by vm.advancedSpeakerMode.collectAsState()
-    val advancedState by vm.advancedSpeakerState.collectAsState()
     val advancedModels by vm.advancedModelState.collectAsState()
-    var inputLanguage by remember { mutableStateOf("system") }
+    val advancedState by vm.advancedSpeakerState.collectAsState()
+    val expectedSpeakers by vm.expectedSpeakers.collectAsState()
+    val translationMode by vm.translationMode.collectAsState()
+    val speechModels by vm.speechLanguageModels.collectAsState()
+    var compatLanguage by remember { mutableStateOf("system") }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) vm.startLive(inputLanguage.takeUnless { it == "system" })
+        if (granted) {
+            vm.startLive(if (advancedMode) null else compatLanguage.takeUnless { it == "system" })
+        }
     }
 
-    ScreenList("Conversa ao vivo", "Reconhecimento e tradução locais") {
-        item {
-            GlassCard {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Column {
-                        Text(if (pipeline.running) "AO VIVO" else "PARADO", fontWeight = FontWeight.Bold, color = if (pipeline.running) Green else TextMuted)
-                        Text(pipeline.stage, color = TextMuted)
-                    }
-                    CapabilityStatePill(AiCapability("Voz", if (speech.available) AiCapabilityState.READY else AiCapabilityState.UNAVAILABLE, ""))
-                }
-            }
-        }
+    Page("Conversa", "Falante + idioma + tradução por trecho") {
         item {
             GlassCard {
                 Row(
@@ -163,13 +166,36 @@ private fun LiveScreen(vm: BudsIAViewModel) {
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    Column {
+                        Text(
+                            if (pipeline.running) "AO VIVO" else "PARADO",
+                            color = if (pipeline.running) Green else TextMuted,
+                            fontWeight = FontWeight.Black
+                        )
+                        Text(pipeline.stage, color = TextMuted)
+                    }
+                    StatusPill(if (advancedMode) "V2" else "COMPAT", if (advancedMode) Violet else Cyan)
+                }
+                pipeline.error?.let {
+                    Spacer(Modifier.height(6.dp))
+                    Text(it, color = Red)
+                }
+            }
+        }
+
+        item {
+            GlassCard {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Column(Modifier.weight(1f)) {
-                        Text("Separação de falantes", fontWeight = FontWeight.Bold)
+                        Text("Motor Conversa V2", fontWeight = FontWeight.Bold)
                         Text(
                             if (advancedMode)
-                                "AudioRecord + VAD + Whisper + impressão de voz"
+                                "Pyannote + Whisper Base + ERes2Net"
                             else
-                                "Modo compatível do Android: sem identificação real de falantes",
+                                "Fallback Android • sem separação real de pessoas",
                             color = TextMuted,
                             style = MaterialTheme.typography.bodySmall
                         )
@@ -180,233 +206,304 @@ private fun LiveScreen(vm: BudsIAViewModel) {
                         enabled = advancedModels.status == AdvancedModelStatus.READY && !pipeline.running
                     )
                 }
-                if (advancedMode) {
-                    Spacer(Modifier.height(8.dp))
-                    ValueRow("Falantes detectados", advancedState.speakerCount.toString())
+                if (advancedModels.status != AdvancedModelStatus.READY) {
                     Text(
-                        "Experimental: os rótulos A/B/C são obtidos da similaridade acústica da voz. Ainda não são nomes de pessoas cadastradas.",
-                        color = Amber,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                } else if (advancedModels.status != AdvancedModelStatus.READY) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "Para ativar, instale o Motor avançado na tela Modelos.",
+                        "Instale o pacote V2 em Modelos para ativar a separação de falantes.",
                         color = Amber,
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
             }
         }
-        item {
-            GlassCard {
-                Text("Direção da tradução", fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(8.dp))
-                TranslationModeChip("Automático  PT ↔ EN", translationMode == TranslationMode.AUTO_PT_EN) {
-                    vm.setTranslationMode(TranslationMode.AUTO_PT_EN)
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
-                        selected = translationMode == TranslationMode.PT_TO_EN,
-                        onClick = { vm.setTranslationMode(TranslationMode.PT_TO_EN) },
-                        label = { Text("PT → EN") }
-                    )
-                    FilterChip(
-                        selected = translationMode == TranslationMode.EN_TO_PT,
-                        onClick = { vm.setTranslationMode(TranslationMode.EN_TO_PT) },
-                        label = { Text("EN → PT") }
-                    )
-                }
-                Text(
-                    "No automático, cada fala é tratada separadamente: português vira inglês e inglês vira português.",
-                    color = TextMuted,
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-        }
-        item {
-            GlassCard {
-                if (advancedMode) {
-                    Text("Idioma da entrada", fontWeight = FontWeight.Bold)
-                    Text(
-                        "Automático pelo Whisper multilíngue. Cada falante pode falar um idioma diferente; a rota de tradução é decidida separadamente em cada fala.",
-                        color = TextMuted,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                } else {
-                    Text("Idioma esperado da entrada", fontWeight = FontWeight.Bold)
+
+        if (advancedMode) {
+            item {
+                GlassCard {
+                    Text("Pessoas esperadas", fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("system" to "Sistema", "pt-BR" to "PT", "en-US" to "EN", "es-ES" to "ES").forEach { (tag, label) ->
+                        listOf(0 to "Auto", 2 to "2", 3 to "3", 4 to "4").forEach { pair ->
                             FilterChip(
-                                selected = inputLanguage == tag,
-                                onClick = { inputLanguage = tag },
-                                label = { Text(label) }
+                                selected = expectedSpeakers == pair.first,
+                                onClick = { vm.setExpectedSpeakers(pair.first) },
+                                enabled = !pipeline.running,
+                                label = { Text(pair.second) }
                             )
                         }
                     }
-                    val selectedTag = inputLanguage.takeUnless { it == "system" }
-                    val model = selectedTag?.let { speechModels[it] }
-                    if (selectedTag != null && model != null) {
-                        SpeechModelStatusRow(model) { vm.downloadSpeechModel(selectedTag) }
-                    }
                     Text(
-                        "A detecção do idioma usa confiança. Ao escolher PT/EN/ES, o Android também recebe essa dica para o modelo de voz offline.",
+                        "Para uma conversa entre duas pessoas, selecionar 2 ajuda o diarizador.",
                         color = TextMuted,
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
             }
         }
+
+        item {
+            TranslationModeCard(translationMode, vm::setTranslationMode)
+        }
+
+        if (!advancedMode) {
+            item {
+                GlassCard {
+                    Text("Idioma esperado no fallback", fontWeight = FontWeight.Bold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(
+                            "system" to "Sistema",
+                            "pt-BR" to "PT",
+                            "en-US" to "EN",
+                            "es-ES" to "ES"
+                        ).forEach { pair ->
+                            FilterChip(
+                                selected = compatLanguage == pair.first,
+                                onClick = { compatLanguage = pair.first },
+                                label = { Text(pair.second) }
+                            )
+                        }
+                    }
+                    compatLanguage.takeUnless { it == "system" }?.let { tag ->
+                        speechModels[tag]?.let { SpeechModelRow(it) { vm.downloadSpeechModel(tag) } }
+                    }
+                }
+            }
+        }
+
         item {
             if (!pipeline.running) {
                 Button(
                     onClick = {
-                        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-                            vm.startLive(inputLanguage.takeUnless { it == "system" })
+                        val granted = ContextCompat.checkSelfPermission(
+                            context,
+                            Manifest.permission.RECORD_AUDIO
+                        ) == PackageManager.PERMISSION_GRANTED
+                        if (granted) {
+                            vm.startLive(if (advancedMode) null else compatLanguage.takeUnless { it == "system" })
                         } else {
                             permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                         }
                     },
-                    modifier = Modifier.fillMaxWidth().height(58.dp),
-                    enabled = if (advancedMode) {
+                    modifier = Modifier.fillMaxWidth().height(60.dp),
+                    enabled = if (advancedMode)
                         advancedModels.status == AdvancedModelStatus.READY
-                    } else {
+                    else
                         speech.available
-                    }
                 ) {
                     Icon(Icons.Rounded.Mic, null)
                     Spacer(Modifier.width(8.dp))
-                    Text("INICIAR SESSÃO LOCAL")
+                    Text("INICIAR SESSÃO", fontWeight = FontWeight.Bold)
                 }
             } else {
                 Button(
                     onClick = vm::stopLive,
-                    modifier = Modifier.fillMaxWidth().height(58.dp),
+                    modifier = Modifier.fillMaxWidth().height(60.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Red)
                 ) {
                     Icon(Icons.Rounded.Stop, null)
                     Spacer(Modifier.width(8.dp))
-                    Text("PARAR")
+                    Text("PARAR", fontWeight = FontWeight.Bold)
                 }
             }
         }
-        if (speech.partialText.isNotBlank()) {
+
+        if (advancedMode && pipeline.running) {
             item {
                 GlassCard {
-                    Text("Escutando…", color = Cyan, fontWeight = FontWeight.Bold)
-                    Text(speech.partialText, style = MaterialTheme.typography.titleLarge)
+                    ValueRow("Falantes estáveis", advancedState.speakerCount.toString())
+                    ValueRow("Janelas processadas", advancedState.processedWindows.toString())
+                    ValueRow("Janelas perdidas", advancedState.droppedWindows.toString())
+                    advancedState.lastProcessingMs?.let { ms ->
+                        ValueRow("Último processamento", ms.toString() + " ms")
+                    }
+                    Text(
+                        "A V2 usa janelas de 8 segundos para ganhar estabilidade. A tradução pode aparecer com atraso proposital.",
+                        color = TextMuted,
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
             }
         }
-        if (speech.statusMessage != null || speech.error != null) {
+
+        if (!advancedMode && (speech.error != null || speech.statusMessage != null)) {
             item {
                 GlassCard {
-                    Text(if (speech.error != null) "Status da voz" else "Motor de voz", color = if (speech.error != null) Red else Cyan, fontWeight = FontWeight.Bold)
+                    Text("Motor de voz", color = if (speech.error != null) Red else Cyan, fontWeight = FontWeight.Bold)
                     speech.statusMessage?.let { Text(it, color = TextMuted) }
                     speech.error?.let { Text(it, color = TextMuted) }
-                    if (speech.modelDownloadRequired && speech.requestedLanguage != null) {
-                        Spacer(Modifier.height(10.dp))
-                        Button(onClick = { vm.downloadSpeechModel(speech.requestedLanguage!!) }, modifier = Modifier.fillMaxWidth()) {
-                            Icon(Icons.Rounded.Download, null)
-                            Spacer(Modifier.width(8.dp))
-                            Text("INSTALAR MODELO DE VOZ OFFLINE")
-                        }
-                    }
-                    speech.modelDownloadProgress?.let { progress ->
-                        Spacer(Modifier.height(8.dp))
-                        LinearProgressIndicator(progress = { progress / 100f }, modifier = Modifier.fillMaxWidth())
-                    }
                 }
             }
         }
-        pipeline.lastItem?.let { current -> item { ConversationCard(current) } }
+
+        pipeline.lastItem?.let { latest ->
+            item { SectionTitle("Último trecho") }
+            item { ConversationCard(latest, true) }
+        }
+
         item {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Linha do tempo da sessão", fontWeight = FontWeight.Bold)
-                TextButton(onClick = vm::clearSession) { Text("Limpar sessão") }
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                SectionTitle("Sessão")
+                TextButton(onClick = vm::clearSession) { Text("Limpar") }
             }
         }
-        items(session.asReversed().take(30)) { conversation -> ConversationCard(conversation, compact = true) }
+
+        if (session.isEmpty()) {
+            item {
+                GlassCard {
+                    Text(
+                        "Ainda não há trechos. No motor V2, espere a primeira janela ser processada.",
+                        color = TextMuted
+                    )
+                }
+            }
+        } else {
+            items(session.asReversed().take(60)) { ConversationCard(it, false) }
+        }
     }
 }
 
 @Composable
-private fun TimelineScreen(vm: BudsIAViewModel) {
+private fun HistoryScreen(vm: BudsIAViewModel) {
     val timeline by vm.timeline.collectAsState(initial = emptyList())
-    ScreenList("Histórico", "Conversas salvas localmente no aparelho") {
+
+    Page("Histórico", "Resultados e telemetria salvos localmente") {
         item {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text(timeline.size.toString() + " trechos salvos", color = TextMuted)
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(timeline.size.toString() + " trechos", color = TextMuted)
                 TextButton(onClick = vm::clearSavedTimeline) {
                     Icon(Icons.Rounded.Delete, null)
-                    Spacer(Modifier.width(4.dp))
-                    Text("Limpar")
+                    Text("Apagar")
                 }
             }
         }
         if (timeline.isEmpty()) {
-            item { GlassCard { Text("Nenhuma conversa salva ainda.", color = TextMuted) } }
+            item { GlassCard { Text("Nenhuma conversa salva.", color = TextMuted) } }
         } else {
-            items(timeline) { conversation -> ConversationCard(conversation, compact = true) }
+            items(timeline) { ConversationCard(it, false) }
         }
     }
 }
 
 @Composable
 private fun ModelsScreen(vm: BudsIAViewModel) {
+    val advanced by vm.advancedModelState.collectAsState()
     val downloaded by vm.downloadedLanguages.collectAsState()
-    val capabilities by vm.capabilities.collectAsState()
     val speechModels by vm.speechLanguageModels.collectAsState()
+    val advancedMode by vm.advancedSpeakerMode.collectAsState()
 
-    ScreenList("Modelos offline", "Downloads só acontecem quando você pedir") {
-        item { CapabilityCard(capabilities.onDeviceSpeech) }
+    Page("Modelos", "Componentes locais da IA") {
         item {
             GlassCard {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text("Modelos de reconhecimento de voz", fontWeight = FontWeight.Bold)
-                    TextButton(onClick = vm::refreshSpeechModels) {
-                        Icon(Icons.Rounded.Refresh, null)
-                        Spacer(Modifier.width(4.dp))
-                        Text("Atualizar")
-                    }
-                }
-                listOf(
-                    "pt-BR" to "Português (Brasil)",
-                    "en-US" to "Inglês (EUA)",
-                    "es-ES" to "Espanhol"
-                ).forEach { (tag, name) ->
-                    Spacer(Modifier.height(6.dp))
-                    Text(name, fontWeight = FontWeight.Medium)
-                    SpeechModelStatusRow(speechModels[tag] ?: SpeechLanguageModelState(tag)) {
-                        vm.downloadSpeechModel(tag)
-                    }
-                }
-            }
-        }
-        item { CapabilityCard(capabilities.languageId) }
-        item { CapabilityCard(capabilities.translation) }
-        item {
-            GlassCard {
-                Text("Modelos de tradução", fontWeight = FontWeight.Bold)
+                Text("Pacote Conversa V2", fontWeight = FontWeight.Black)
+                Text(
+                    when (advanced.status) {
+                        AdvancedModelStatus.READY ->
+                            "PRONTO • " + (advanced.installedVariant ?: "V2")
+                        AdvancedModelStatus.DOWNLOADING -> advanced.message
+                        AdvancedModelStatus.ERROR -> "ERRO • " + advanced.message
+                        AdvancedModelStatus.NOT_INSTALLED -> "NÃO INSTALADO"
+                    },
+                    color = when (advanced.status) {
+                        AdvancedModelStatus.READY -> Green
+                        AdvancedModelStatus.DOWNLOADING -> Cyan
+                        AdvancedModelStatus.ERROR -> Red
+                        AdvancedModelStatus.NOT_INSTALLED -> Amber
+                    },
+                    fontWeight = FontWeight.Bold
+                )
                 Spacer(Modifier.height(8.dp))
-                listOf("pt" to "Português", "en" to "Inglês", "es" to "Espanhol").forEach { (tag, name) ->
-                    Row(Modifier.fillMaxWidth().padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text(name)
-                            Text(if (tag in downloaded) "INSTALADO" else "NÃO INSTALADO", color = if (tag in downloaded) Green else TextMuted, style = MaterialTheme.typography.labelSmall)
+                Text(
+                    "Whisper Base multilíngue + Pyannote Segmentation 3.0 + ERes2Net. O download é grande; depois a inferência funciona localmente.",
+                    color = TextMuted
+                )
+
+                if (advanced.status == AdvancedModelStatus.DOWNLOADING) {
+                    Spacer(Modifier.height(10.dp))
+                    LinearProgressIndicator(
+                        progress = { advanced.progress },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    advanced.currentFile?.let {
+                        Text(it, color = TextMuted, style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+                when (advanced.status) {
+                    AdvancedModelStatus.NOT_INSTALLED,
+                    AdvancedModelStatus.ERROR -> {
+                        Button(
+                            onClick = vm::installAdvancedModels,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Rounded.Download, null)
+                            Text("INSTALAR PACOTE V2")
                         }
-                        if (tag !in downloaded) {
-                            OutlinedButton(onClick = { vm.downloadModel(tag) }) { Text("Baixar") }
+                    }
+                    AdvancedModelStatus.READY -> {
+                        if (!advancedMode) {
+                            TextButton(onClick = vm::removeAdvancedModels) {
+                                Text("Remover pacote V2")
+                            }
+                        }
+                    }
+                    AdvancedModelStatus.DOWNLOADING -> Unit
+                }
+            }
+        }
+
+        item {
+            GlassCard {
+                Text("Tradução offline", fontWeight = FontWeight.Bold)
+                Text("PT e EN são obrigatórios para o modo automático.", color = TextMuted)
+                listOf("pt" to "Português", "en" to "Inglês", "es" to "Espanhol").forEach { pair ->
+                    Row(
+                        Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(pair.second)
+                            Text(
+                                if (pair.first in downloaded) "INSTALADO" else "NÃO INSTALADO",
+                                color = if (pair.first in downloaded) Green else Amber,
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                        if (pair.first !in downloaded) {
+                            OutlinedButton(onClick = { vm.downloadModel(pair.first) }) {
+                                Text("Baixar")
+                            }
                         }
                     }
                 }
             }
         }
-        item { CapabilityCard(capabilities.speakerDiarization) }
-        item { AdvancedModelsCard(vm) }
-        item { CapabilityCard(capabilities.speakerIdentification) }
-        item { CapabilityCard(capabilities.localLlm) }
+
+        item {
+            GlassCard {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("Fallback de voz do Android", fontWeight = FontWeight.Bold)
+                    TextButton(onClick = vm::refreshSpeechModels) { Text("Atualizar") }
+                }
+                listOf("pt-BR" to "Português", "en-US" to "Inglês", "es-ES" to "Espanhol").forEach { pair ->
+                    Text(pair.second)
+                    SpeechModelRow(
+                        speechModels[pair.first] ?: SpeechLanguageModelState(pair.first)
+                    ) {
+                        vm.downloadSpeechModel(pair.first)
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -416,219 +513,298 @@ private fun PrivacyScreen(vm: BudsIAViewModel) {
     val save by vm.saveTranscript.collectAsState()
     val mode by vm.translationMode.collectAsState()
 
-    ScreenList("Privacidade", "Controles locais e transparentes") {
+    Page("Privacidade", "Controles locais e explícitos") {
         item {
             GlassCard {
-                SettingSwitch("Sessões estritamente offline", "Sessões ao vivo não fazem download nem fallback para nuvem.", strict, vm::setStrictOffline)
+                SettingSwitch(
+                    "Sessões offline",
+                    "A conversa não baixa modelos nem usa fallback remoto enquanto está rodando.",
+                    strict,
+                    vm::setStrictOffline
+                )
                 HorizontalDivider(color = Color.White.copy(alpha = .08f))
-                SettingSwitch("Salvar transcrição localmente", "Desative para manter novos trechos apenas na memória da sessão.", save, vm::setSaveTranscript)
+                SettingSwitch(
+                    "Salvar histórico",
+                    "Desative para manter novos trechos apenas na sessão em memória.",
+                    save,
+                    vm::setSaveTranscript
+                )
             }
         }
+        item { TranslationModeCard(mode, vm::setTranslationMode) }
         item {
             GlassCard {
-                Text("Tradução padrão", fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(8.dp))
-                TranslationModeChip("Automático PT ↔ EN", mode == TranslationMode.AUTO_PT_EN) { vm.setTranslationMode(TranslationMode.AUTO_PT_EN) }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(selected = mode == TranslationMode.PT_TO_EN, onClick = { vm.setTranslationMode(TranslationMode.PT_TO_EN) }, label = { Text("PT → EN") })
-                    FilterChip(selected = mode == TranslationMode.EN_TO_PT, onClick = { vm.setTranslationMode(TranslationMode.EN_TO_PT) }, label = { Text("EN → PT") })
-                }
-            }
-        }
-        item {
-            GlassCard {
-                Text("Política de dados", fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(8.dp))
-                Text("• O áudio bruto do microfone não é salvo.", color = TextMuted)
-                Text("• Não existe gravação oculta em segundo plano.", color = TextMuted)
-                Text("• O app não afirma ler pensamentos ou intenções ocultas.", color = TextMuted)
-                Text("• Downloads de modelos são explícitos.", color = TextMuted)
-                Text("• Identificação de pessoas por voz ainda não está habilitada.", color = TextMuted)
+                Text("Regras", fontWeight = FontWeight.Bold)
+                Text("• Áudio bruto não é salvo no histórico.", color = TextMuted)
+                Text("• O microfone só funciona em sessão iniciada por você.", color = TextMuted)
+                Text("• Perfis A/B/C existem só na sessão atual.", color = TextMuted)
+                Text("• Incerteza é exibida, não escondida.", color = TextMuted)
+                Text("• O app não afirma ler pensamentos ou intenção mental.", color = TextMuted)
             }
         }
     }
 }
 
 @Composable
-private fun ConversationCard(item: ConversationItem, compact: Boolean = false) {
-    val source = displayLanguage(item.languageTag)
-    val target = displayLanguage(item.translationTargetTag)
+private fun ConversationCard(item: ConversationItem, large: Boolean) {
+    val source = languageLabel(item.languageTag)
+    val target = languageLabel(item.translationTargetTag)
+    val identityColor = when {
+        item.speakerLabel == "Falante ?" -> Amber
+        item.speakerStable -> Green
+        else -> Cyan
+    }
 
     GlassCard {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Column {
-                Text(item.speakerLabel, fontWeight = FontWeight.Bold)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    LanguageBadge(source)
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Top
+        ) {
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        item.speakerLabel,
+                        fontWeight = FontWeight.Black,
+                        style = if (large) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    StatusPill(
+                        when {
+                            item.speakerLabel == "Falante ?" -> "INCERTO"
+                            item.speakerStable -> "ESTÁVEL"
+                            else -> "APRENDENDO"
+                        },
+                        identityColor
+                    )
+                }
+                Spacer(Modifier.height(6.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    LanguagePill(source, item.languageConfidence)
                     if (item.translationTargetTag != null) {
-                        Icon(Icons.Rounded.ArrowForward, null, tint = TextMuted, modifier = Modifier.size(14.dp))
-                        LanguageBadge(target)
+                        Icon(Icons.Rounded.ArrowForward, null, tint = TextMuted, modifier = Modifier.size(15.dp))
+                        LanguagePill(target, null)
                     }
                 }
             }
-            Text(SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(item.timestamp)), color = TextMuted, style = MaterialTheme.typography.labelSmall)
-        }
-        item.speakerSimilarity?.let { similarity ->
             Text(
-                "Similaridade da voz: " + (similarity * 100).toInt() + "%",
-                color = Green,
+                SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(item.timestamp)),
+                color = TextMuted,
                 style = MaterialTheme.typography.labelSmall
             )
         }
-        Spacer(Modifier.height(8.dp))
-        Text(item.originalText, style = if (compact) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.titleMedium)
 
-        item.languageConfidence?.takeIf { it > 0f }?.let { confidence ->
-            Text("Confiança do idioma: " + (confidence * 100).toInt() + "%", color = TextMuted, style = MaterialTheme.typography.labelSmall)
+        item.speakerSimilarity?.let { similarity ->
+            Text(
+                "Similaridade de voz: " + (similarity * 100).toInt() + "%",
+                color = identityColor,
+                style = MaterialTheme.typography.labelSmall
+            )
         }
 
-        item.translatedText?.takeIf { it != item.originalText }?.let { translated ->
-            Spacer(Modifier.height(10.dp))
-            Surface(color = Cyan.copy(alpha = .08f), shape = RoundedCornerShape(14.dp)) {
-                Column(Modifier.padding(12.dp)) {
-                    Text(source + "  →  " + target, color = Cyan, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Black)
-                    Text(translated)
+        item.languageReason?.let {
+            Text(it, color = TextMuted, style = MaterialTheme.typography.labelSmall)
+        }
+
+        Spacer(Modifier.height(8.dp))
+        Text(
+            item.originalText,
+            style = if (large) MaterialTheme.typography.titleLarge else MaterialTheme.typography.bodyLarge
+        )
+
+        item.transcriptQuality?.let { quality ->
+            val qColor = when {
+                quality >= 0.68f -> Green
+                quality >= 0.50f -> Amber
+                else -> Red
+            }
+            Text(
+                "Qualidade: " + (quality * 100).toInt() + "% • " + (item.transcriptQualityReason ?: ""),
+                color = qColor,
+                style = MaterialTheme.typography.labelSmall
+            )
+        }
+
+        when (item.translationStatus) {
+            "OK" -> item.translatedText?.let { translated ->
+                Spacer(Modifier.height(10.dp))
+                Surface(
+                    color = Cyan.copy(alpha = .08f),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(Modifier.padding(14.dp)) {
+                        Text(source + " → " + target, color = Cyan, fontWeight = FontWeight.Black)
+                        Text(translated, style = MaterialTheme.typography.bodyLarge)
+                    }
                 }
             }
+            "LANGUAGE_UNCERTAIN" -> WarningText("Idioma incerto • sem tradução")
+            "TRANSCRIPT_UNCERTAIN" -> WarningText("Transcrição incerta • tradução suspensa")
+            "MODEL_MISSING" -> WarningText("Modelo de tradução ausente")
         }
 
         if (item.signals.isNotEmpty()) {
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(8.dp))
             item.signals.forEach { signal ->
-                Surface(color = Amber.copy(alpha = .09f), shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+                Surface(
+                    color = Amber.copy(alpha = .08f),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)
+                ) {
                     Column(Modifier.padding(12.dp)) {
                         Text(signal.type.name.replace("_", " "), color = Amber, fontWeight = FontWeight.Bold)
-                        Text("Confiança: " + (signal.confidence * 100).toInt() + "%", style = MaterialTheme.typography.labelSmall, color = TextMuted)
+                        Text(
+                            "Confiança: " + (signal.confidence * 100).toInt() + "%",
+                            color = TextMuted,
+                            style = MaterialTheme.typography.labelSmall
+                        )
                         Text("Evidência: “" + signal.evidence + "”", style = MaterialTheme.typography.bodySmall)
-                        Text(signal.explanation, style = MaterialTheme.typography.bodySmall, color = TextMuted)
                     }
                 }
             }
         }
-    }
-}
 
-@Composable
-private fun LanguageBadge(label: String) {
-    Surface(color = Violet.copy(alpha = .12f), contentColor = Violet, shape = RoundedCornerShape(999.dp), border = BorderStroke(1.dp, Violet.copy(alpha = .25f))) {
-        Text(label, modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-    }
-}
-
-@Composable
-private fun TranslationModeChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    FilterChip(selected = selected, onClick = onClick, label = { Text(label) }, leadingIcon = {
-        Icon(Icons.Rounded.SwapHoriz, null, modifier = Modifier.size(18.dp))
-    })
-}
-
-@Composable
-private fun AdvancedModelsCard(vm: BudsIAViewModel) {
-    val model by vm.advancedModelState.collectAsState()
-    val advancedMode by vm.advancedSpeakerMode.collectAsState()
-
-    GlassCard {
-        Text("Motor avançado de falantes", fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(6.dp))
         Text(
-            when (model.status) {
-                AdvancedModelStatus.READY -> "INSTALADO • funciona offline depois do download"
-                AdvancedModelStatus.DOWNLOADING -> model.message
-                AdvancedModelStatus.ERROR -> "ERRO • " + model.message
-                AdvancedModelStatus.NOT_INSTALLED -> "NÃO INSTALADO • pacote opcional grande"
-            },
-            color = when (model.status) {
-                AdvancedModelStatus.READY -> Green
-                AdvancedModelStatus.DOWNLOADING -> Cyan
-                AdvancedModelStatus.ERROR -> Red
-                AdvancedModelStatus.NOT_INSTALLED -> Amber
-            },
-            style = MaterialTheme.typography.bodySmall
+            if (item.engine == ConversationEngine.LOCAL_V2) "Conversa V2" else "Compatibilidade Android",
+            color = TextMuted,
+            style = MaterialTheme.typography.labelSmall
         )
+    }
+}
+
+@Composable
+private fun TranslationModeCard(
+    mode: TranslationMode,
+    onMode: (TranslationMode) -> Unit
+) {
+    GlassCard {
+        Text("Direção da tradução", fontWeight = FontWeight.Bold)
+        FilterChip(
+            selected = mode == TranslationMode.AUTO_PT_EN,
+            onClick = { onMode(TranslationMode.AUTO_PT_EN) },
+            label = { Text("Automático PT ↔ EN") },
+            leadingIcon = { Icon(Icons.Rounded.SwapHoriz, null) }
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(
+                selected = mode == TranslationMode.PT_TO_EN,
+                onClick = { onMode(TranslationMode.PT_TO_EN) },
+                label = { Text("PT → EN") }
+            )
+            FilterChip(
+                selected = mode == TranslationMode.EN_TO_PT,
+                onClick = { onMode(TranslationMode.EN_TO_PT) },
+                label = { Text("EN → PT") }
+            )
+        }
         Text(
-            "Inclui Silero VAD, Whisper Tiny multilíngue e ERes2Net para separar vozes em Falante A/B/C e detectar o idioma de cada fala.",
+            "No automático, cada trecho decide sua rota. Idioma incerto não é traduzido à força.",
             color = TextMuted,
             style = MaterialTheme.typography.bodySmall
         )
+    }
+}
 
-        if (model.status == AdvancedModelStatus.DOWNLOADING) {
-            Spacer(Modifier.height(10.dp))
-            LinearProgressIndicator(
-                progress = { model.progress },
-                modifier = Modifier.fillMaxWidth()
-            )
-            model.currentFile?.let {
-                Text(it, color = TextMuted, style = MaterialTheme.typography.labelSmall)
-            }
-        }
+@Composable
+private fun WarningText(text: String) {
+    Spacer(Modifier.height(8.dp))
+    Surface(color = Amber.copy(alpha = .08f), shape = RoundedCornerShape(12.dp)) {
+        Text(text, modifier = Modifier.padding(10.dp), color = Amber)
+    }
+}
 
-        Spacer(Modifier.height(10.dp))
-        when (model.status) {
-            AdvancedModelStatus.NOT_INSTALLED,
-            AdvancedModelStatus.ERROR -> {
-                Button(onClick = vm::installAdvancedModels, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Rounded.Download, null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("INSTALAR MOTOR AVANÇADO")
-                }
-            }
-            AdvancedModelStatus.READY -> {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    CapabilityStatePill(
-                        AiCapability(
-                            "Falantes",
-                            AiCapabilityState.EXPERIMENTAL,
-                            ""
-                        )
-                    )
-                    if (!advancedMode) {
-                        TextButton(onClick = vm::removeAdvancedModels) { Text("Remover modelos") }
-                    }
-                }
-            }
-            AdvancedModelStatus.DOWNLOADING -> Unit
-        }
+@Composable
+private fun LanguagePill(label: String, confidence: Float?) {
+    Surface(
+        color = Violet.copy(alpha = .12f),
+        contentColor = Violet,
+        shape = RoundedCornerShape(999.dp),
+        border = BorderStroke(1.dp, Violet.copy(alpha = .25f))
+    ) {
+        Text(
+            if (confidence != null && label != "?")
+                label + " " + (confidence * 100).toInt() + "%"
+            else
+                label,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold
+        )
     }
 }
 
 @Composable
 private fun CapabilityCard(capability: AiCapability) {
     GlassCard {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Text(capability.name, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-            CapabilityStatePill(capability)
+            val state = capabilityState(capability.state)
+            StatusPill(state.first, state.second)
         }
-        Spacer(Modifier.height(6.dp))
         Text(capability.detail, color = TextMuted, style = MaterialTheme.typography.bodySmall)
     }
 }
 
 @Composable
-private fun CapabilityStatePill(capability: AiCapability) {
-    val (label, color) = when (capability.state) {
-        AiCapabilityState.READY -> "PRONTO" to Green
-        AiCapabilityState.DOWNLOAD_REQUIRED -> "BAIXAR" to Amber
-        AiCapabilityState.UNAVAILABLE -> "INDISPONÍVEL" to Red
-        AiCapabilityState.EXPERIMENTAL -> "EXPERIMENTAL" to Violet
-        AiCapabilityState.PLANNED -> "PLANEJADO" to TextMuted
-        AiCapabilityState.REQUIRES_PERMISSION -> "PERMISSÃO" to Cyan
+private fun SpeechModelRow(model: SpeechLanguageModelState, onDownload: () -> Unit) {
+    val state = when (model.status) {
+        SpeechLanguageStatus.INSTALLED -> "INSTALADO" to Green
+        SpeechLanguageStatus.DOWNLOAD_REQUIRED -> "BAIXAR" to Amber
+        SpeechLanguageStatus.PENDING -> "PENDENTE" to Cyan
+        SpeechLanguageStatus.UNSUPPORTED -> "NÃO SUPORTADO" to Red
+        SpeechLanguageStatus.UNKNOWN -> "DESCONHECIDO" to TextMuted
     }
-    Surface(color = color.copy(alpha = .12f), contentColor = color, shape = RoundedCornerShape(999.dp), border = BorderStroke(1.dp, color.copy(alpha = .25f))) {
-        Text(label, modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(state.first, color = state.second, style = MaterialTheme.typography.labelSmall)
+            if (model.detail.isNotBlank()) {
+                Text(model.detail, color = TextMuted, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        if (
+            model.status == SpeechLanguageStatus.DOWNLOAD_REQUIRED ||
+            model.status == SpeechLanguageStatus.UNKNOWN
+        ) {
+            OutlinedButton(onClick = onDownload) { Text("Instalar") }
+        }
     }
 }
 
 @Composable
-private fun HeroCard(title: String, subtitle: String) {
-    Surface(color = Color.White.copy(alpha = .055f), border = BorderStroke(1.dp, Cyan.copy(alpha = .16f)), shape = RoundedCornerShape(28.dp), modifier = Modifier.fillMaxWidth()) {
+private fun HeroCard(subtitle: String) {
+    Surface(
+        color = Color.White.copy(alpha = .055f),
+        border = BorderStroke(1.dp, Cyan.copy(alpha = .16f)),
+        shape = RoundedCornerShape(28.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
         Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
-            Surface(color = Color(0xFF071018), shape = RoundedCornerShape(24.dp), border = BorderStroke(1.dp, Cyan.copy(alpha = .16f))) {
-                Image(painter = painterResource(R.drawable.budsia_logo), contentDescription = "Logo BudsIA", modifier = Modifier.padding(4.dp).size(88.dp))
+            Surface(
+                color = Color(0xFF071018),
+                shape = RoundedCornerShape(24.dp),
+                border = BorderStroke(1.dp, Cyan.copy(alpha = .16f))
+            ) {
+                Image(
+                    painter = painterResource(R.drawable.budsia_logo),
+                    contentDescription = "BudsIA",
+                    modifier = Modifier.padding(4.dp).size(88.dp)
+                )
             }
             Spacer(Modifier.width(16.dp))
             Column {
-                Text("BudsIA", color = Cyan, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
+                Text("BudsIA", color = Cyan, fontWeight = FontWeight.Black)
+                Text("CONVERSATION AI V2", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
                 Text(subtitle, color = TextMuted, style = MaterialTheme.typography.bodySmall)
             }
         }
@@ -636,39 +812,56 @@ private fun HeroCard(title: String, subtitle: String) {
 }
 
 @Composable
-private fun SpeechModelStatusRow(model: SpeechLanguageModelState, onDownload: () -> Unit) {
-    val (label, color) = when (model.status) {
-        SpeechLanguageStatus.INSTALLED -> "INSTALADO" to Green
-        SpeechLanguageStatus.DOWNLOAD_REQUIRED -> "BAIXAR" to Amber
-        SpeechLanguageStatus.PENDING -> "PENDENTE" to Cyan
-        SpeechLanguageStatus.UNSUPPORTED -> "NÃO SUPORTADO" to Red
-        SpeechLanguageStatus.UNKNOWN -> "DESCONHECIDO" to TextMuted
-    }
-    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Text(label, color = color, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-            if (model.detail.isNotBlank()) Text(model.detail, color = TextMuted, style = MaterialTheme.typography.bodySmall)
-        }
-        if (model.status == SpeechLanguageStatus.DOWNLOAD_REQUIRED || model.status == SpeechLanguageStatus.UNKNOWN) {
-            OutlinedButton(onClick = onDownload) {
-                Icon(Icons.Rounded.Download, null)
-                Spacer(Modifier.width(4.dp))
-                Text("Instalar")
-            }
-        }
+private fun StatusPill(label: String, color: Color) {
+    Surface(
+        color = color.copy(alpha = .12f),
+        contentColor = color,
+        shape = RoundedCornerShape(999.dp),
+        border = BorderStroke(1.dp, color.copy(alpha = .25f))
+    ) {
+        Text(
+            label,
+            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold
+        )
     }
 }
 
 @Composable
 private fun GlassCard(content: @Composable ColumnScope.() -> Unit) {
-    Surface(color = Color.White.copy(alpha = .05f), border = BorderStroke(1.dp, Color.White.copy(alpha = .08f)), shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth()) {
+    Surface(
+        color = Color.White.copy(alpha = .05f),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = .08f)),
+        shape = RoundedCornerShape(24.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
         Column(Modifier.padding(17.dp), content = content)
     }
 }
 
 @Composable
+private fun SettingSwitch(
+    title: String,
+    subtitle: String,
+    value: Boolean,
+    onChange: (Boolean) -> Unit
+) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title, fontWeight = FontWeight.SemiBold)
+            Text(subtitle, color = TextMuted, style = MaterialTheme.typography.bodySmall)
+        }
+        Switch(value, onChange)
+    }
+}
+
+@Composable
 private fun ValueRow(label: String, value: String) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 5.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
         Text(label, color = TextMuted)
         Text(value, fontWeight = FontWeight.Medium)
     }
@@ -680,43 +873,38 @@ private fun SectionTitle(title: String) {
 }
 
 @Composable
-private fun SettingSwitch(title: String, subtitle: String, value: Boolean, onChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Text(title, fontWeight = FontWeight.SemiBold)
-            Text(subtitle, color = TextMuted, style = MaterialTheme.typography.bodySmall)
-        }
-        Switch(value, onChange)
-    }
-}
-
-@Composable
-private fun ScreenList(title: String, subtitle: String, content: LazyListScope.() -> Unit) {
+private fun Page(
+    title: String,
+    subtitle: String,
+    content: LazyListScope.() -> Unit
+) {
     LazyColumn(
-        Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Ink, Color(0xFF080C12), Ink))),
+        Modifier
+            .fillMaxSize()
+            .background(Brush.verticalGradient(listOf(Ink, Color(0xFF080C12), Ink))),
         contentPadding = PaddingValues(18.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            Column {
-                Text(title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
-                Text(subtitle, color = TextMuted)
-            }
+            Text(title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
+            Text(subtitle, color = TextMuted)
         }
         content()
         item { Spacer(Modifier.height(10.dp)) }
     }
 }
 
-private fun displayLanguage(tag: String?): String = when (tag?.substringBefore('-')?.lowercase()) {
+private fun modelStatusLabel(status: AdvancedModelStatus): String = when (status) {
+    AdvancedModelStatus.READY -> "PRONTO"
+    AdvancedModelStatus.DOWNLOADING -> "BAIXANDO"
+    AdvancedModelStatus.ERROR -> "ERRO"
+    AdvancedModelStatus.NOT_INSTALLED -> "NÃO INSTALADO"
+}
+
+private fun languageLabel(tag: String?): String = when (tag?.substringBefore('-')?.lowercase()) {
     "pt" -> "PT"
     "en" -> "EN"
-    "es" -> "ES"
-    "fr" -> "FR"
-    "de" -> "DE"
-    "it" -> "IT"
-    null -> "?"
-    else -> tag.substringBefore('-').uppercase()
+    else -> "?"
 }
 
 private fun translationModeLabel(mode: TranslationMode): String = when (mode) {
@@ -725,12 +913,21 @@ private fun translationModeLabel(mode: TranslationMode): String = when (mode) {
     TranslationMode.EN_TO_PT -> "EN → PT"
 }
 
+private fun capabilityState(state: AiCapabilityState): Pair<String, Color> = when (state) {
+    AiCapabilityState.READY -> "PRONTO" to Green
+    AiCapabilityState.DOWNLOAD_REQUIRED -> "BAIXAR" to Amber
+    AiCapabilityState.UNAVAILABLE -> "INDISPONÍVEL" to Red
+    AiCapabilityState.EXPERIMENTAL -> "EXPERIMENTAL" to Violet
+    AiCapabilityState.PLANNED -> "PLANEJADO" to TextMuted
+    AiCapabilityState.REQUIRES_PERMISSION -> "PERMISSÃO" to Cyan
+}
+
 private fun AiCapabilities.asList(): List<AiCapability> = listOf(
     onDeviceSpeech,
     languageId,
     translation,
-    discourseAnalysis,
     speakerDiarization,
     speakerIdentification,
+    discourseAnalysis,
     localLlm
 )
