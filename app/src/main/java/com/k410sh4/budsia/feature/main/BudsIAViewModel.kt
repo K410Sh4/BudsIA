@@ -509,7 +509,7 @@ class BudsIAViewModel @Inject constructor(
         var translationStatus = when {
             languageDecision.languageTag == null -> "LANGUAGE_UNCERTAIN"
             !route.shouldTranslate -> "NOT_APPLICABLE"
-            transcriptQuality < 0.50f -> "TRANSCRIPT_UNCERTAIN"
+            transcriptQuality < 0.68f -> "TRANSCRIPT_UNCERTAIN"
             else -> "PENDING"
         }
 
@@ -543,7 +543,7 @@ class BudsIAViewModel @Inject constructor(
 
         _pipeline.update { it.copy(stage = "Analisando conversa…") }
 
-        val signals = if (transcriptQuality >= 0.50f) {
+        val signals = if (transcriptQuality >= 0.68f) {
             analyzer.analyze(text)
         } else {
             emptyList()
