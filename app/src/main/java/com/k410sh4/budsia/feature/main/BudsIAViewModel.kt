@@ -522,11 +522,13 @@ class BudsIAViewModel @Inject constructor(
                 targetTag = route.targetTag!!,
                 allowModelDownload = false
             ).getOrElse {
-                val key = route.sourceTag + "->" + route.targetTag
+                val source = route.sourceTag ?: "?"
+                val target = route.targetTag ?: "?"
+                val key = source + "->" + target
                 if (translationWarnings.add(key)) {
                     _events.tryEmit(
-                        "Tradução " + route.sourceTag.uppercase() +
-                            " → " + route.targetTag.uppercase() +
+                        "Tradução " + source.uppercase() +
+                            " → " + target.uppercase() +
                             " indisponível. Verifique os modelos em Modelos."
                     )
                 }
