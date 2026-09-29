@@ -8,6 +8,7 @@ data class ConversationEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val timestamp: Long,
     val speakerLabel: String,
+    val speakerSimilarity: Float?,
     val originalText: String,
     val languageTag: String?,
     val languageConfidence: Float?,
@@ -31,7 +32,7 @@ interface ConversationDao {
 
 @Database(
     entities = [ConversationEntity::class],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class BudsIADatabase : RoomDatabase() {
