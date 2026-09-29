@@ -18,7 +18,7 @@ object AppModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): BudsIADatabase =
         Room.databaseBuilder(context, BudsIADatabase::class.java, "budsia.db")
-            .fallbackToDestructiveMigration()
+            .fallbackToDestructiveMigration(dropAllTables = true)
             .build()
 
     @Provides
