@@ -31,6 +31,12 @@ jobs:
       - name: Install Android SDK 36
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
+      - name: Download sherpa-onnx Android runtime
+        run: |
+          mkdir -p app/libs
+          curl -L --fail --retry 3             -o app/libs/sherpa-onnx-1.13.8.aar             https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-1.13.8.aar
+          echo "633c24321e06b1fe79feafa03ea16cbc0f8a286641e2da3559bac91bdb13bd96  app/libs/sherpa-onnx-1.13.8.aar" | sha256sum -c -
+
       - name: Setup Gradle 9.6
         uses: gradle/actions/setup-gradle@v6
         with:
