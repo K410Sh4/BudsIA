@@ -1,6 +1,5 @@
 package com.k410sh4.budsia.feature.main
 
-import android.os.Build
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.k410sh4.budsia.core.analysis.ExplainableDiscourseAnalyzer
@@ -10,7 +9,6 @@ import com.k410sh4.budsia.data.repository.ConversationRepository
 import com.k410sh4.budsia.data.settings.PrivacySettings
 import com.k410sh4.budsia.domain.model.*
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -24,6 +22,7 @@ class BudsIAViewModel @Inject constructor(
     private val settings: PrivacySettings
 ) : ViewModel() {
     val speechState = speech.state
+    val speechLanguageModels = speech.languageModels
     val timeline = conversations.recent
 
     val strictOffline = settings.strictOffline
@@ -49,17 +48,42 @@ class BudsIAViewModel @Inject constructor(
     val events = _events.asSharedFlow()
 
     private var continuous = false
-    private var lastProcessedText = ""
+    private var lastProcessedResultId = 0L
+    private var activeInputLanguageTag: String? = null
+
+    private val speechTags = listOf("pt-BR", "en-US", "es-ES")
 
     init {
         refreshCapabilities()
 
         viewModelScope.launch {
             speech.state.collect { state ->
-                val text = state.finalText.trim()
-                if (text.isNotEmpty() && text != lastProcessedText) {
-                    lastProcessedText = text
-                    processRecognizedText(text, state.confidence)
+                if (state.modelDownloadRequired) {
+                    continuous = false
+                    _pipeline.update {
+                        it.copy(
+                            running = false,
+                            stage = "Speech model required",
+                            error = state.error
+                        )
+                    }
+                } else if (continuous) {
+                    _pipeline.update {
+                        it.copy(
+                            running = true,
+                            stage = when {
+                                state.processing -> "Processing locally"
+                                state.listening -> "Listening"
+                                else -> state.statusMessage ?: it.stage
+                            },
+                            error = state.error
+                        )
+                    }
+                }
+
+                if (state.resultId > lastProcessedResultId && state.finalText.isNotBlank()) {
+                    lastProcessedResultId = state.resultId
+                    processRecognizedText(state.finalText.trim(), state.confidence)
                 }
             }
         }
@@ -67,6 +91,8 @@ class BudsIAViewModel @Inject constructor(
 
     fun refreshCapabilities() {
         viewModelScope.launch {
+            speech.refreshLanguageSupport(speechTags)
+
             val downloaded = runCatching { language.downloadedLanguages() }.getOrDefault(emptySet())
             _downloadedLanguages.value = downloaded
 
@@ -76,14 +102,14 @@ class BudsIAViewModel @Inject constructor(
                     "On-device speech",
                     if (speechAvailable) AiCapabilityState.READY else AiCapabilityState.UNAVAILABLE,
                     if (speechAvailable)
-                        "Android on-device SpeechRecognizer available"
+                        "Android on-device SpeechRecognizer available; language models are checked separately"
                     else
                         "Requires Android 12+ and an installed on-device recognition service"
                 ),
                 languageId = AiCapability(
                     "Language identification",
                     AiCapabilityState.READY,
-                    "ML Kit bundled language-ID model"
+                    "ML Kit bundled model with confidence threshold"
                 ),
                 translation = AiCapability(
                     "Offline translation",
@@ -96,22 +122,22 @@ class BudsIAViewModel @Inject constructor(
                 speakerDiarization = AiCapability(
                     "Speaker diarization",
                     AiCapabilityState.PLANNED,
-                    "sherpa-onnx local pipeline planned for V0.2"
+                    "sherpa-onnx local pipeline planned for the next phase"
                 ),
                 speakerIdentification = AiCapability(
                     "Speaker identification",
                     AiCapabilityState.PLANNED,
-                    "Local voice embeddings planned for V0.2"
+                    "Local voice embeddings planned after diarization"
                 ),
                 localLlm = AiCapability(
                     "Local LLM",
                     AiCapabilityState.PLANNED,
-                    "Gemini Nano capability probe + LiteRT-LM fallback planned for V0.2"
+                    "Gemini Nano capability probe + LiteRT-LM fallback planned"
                 ),
                 discourseAnalysis = AiCapability(
                     "Discourse analysis",
                     AiCapabilityState.EXPERIMENTAL,
-                    "V0.1 uses transparent rules with evidence; no mind-reading claims"
+                    "Transparent local rules with evidence; no hidden-intent claims"
                 )
             )
         }
@@ -119,23 +145,29 @@ class BudsIAViewModel @Inject constructor(
 
     fun startLive(inputLanguageTag: String? = null) {
         if (!speech.checkAvailability()) {
-            _events.tryEmit("On-device speech recognition is not available on this phone yet.")
+            _events.tryEmit("On-device speech recognition is not available on this phone.")
             return
         }
+
+        activeInputLanguageTag = inputLanguageTag
         continuous = true
-        _pipeline.value = _pipeline.value.copy(running = true, stage = "Listening", error = null)
-        speech.start(inputLanguageTag)
+        _pipeline.value = _pipeline.value.copy(
+            running = true,
+            stage = "Preparing offline speech",
+            error = null
+        )
+        speech.startContinuous(inputLanguageTag)
     }
 
     fun stopLive() {
         continuous = false
-        speech.stop()
-        _pipeline.value = _pipeline.value.copy(running = false, stage = "Stopped")
+        speech.stopContinuous()
+        _pipeline.value = _pipeline.value.copy(running = false, stage = "Stopped", error = null)
     }
 
     fun clearSession() {
         _sessionItems.value = emptyList()
-        lastProcessedText = ""
+        lastProcessedResultId = speech.state.value.resultId
     }
 
     fun clearSavedTimeline() {
@@ -147,16 +179,25 @@ class BudsIAViewModel @Inject constructor(
 
     fun downloadModel(languageTag: String) {
         viewModelScope.launch {
-            _events.emit("Downloading $languageTag model over Wi-Fi…")
+            _events.emit("Downloading translation model for $languageTag over Wi-Fi…")
             language.downloadLanguageModel(languageTag)
                 .onSuccess {
-                    _events.emit("$languageTag model installed.")
+                    _events.emit("$languageTag translation model installed.")
                     refreshCapabilities()
                 }
                 .onFailure {
-                    _events.emit(it.message ?: "Model download failed")
+                    _events.emit(it.message ?: "Translation model download failed")
                 }
         }
+    }
+
+    fun downloadSpeechModel(languageTag: String) {
+        _events.tryEmit("Requesting Android offline speech model for $languageTag…")
+        speech.downloadLanguageModel(languageTag)
+    }
+
+    fun refreshSpeechModels() {
+        speech.refreshLanguageSupport(speechTags)
     }
 
     fun setStrictOffline(value: Boolean) {
@@ -172,27 +213,44 @@ class BudsIAViewModel @Inject constructor(
     }
 
     private suspend fun processRecognizedText(text: String, confidence: Float?) {
-        _pipeline.value = _pipeline.value.copy(stage = "Language ID")
+        _pipeline.value = _pipeline.value.copy(stage = "Language ID", error = null)
 
-        val detected = runCatching { language.identify(text) }.getOrNull()
+        val guess = runCatching { language.identifyWithConfidence(text) }
+            .getOrDefault(LanguageGuess(null, 0f))
+
+        val configuredSource = activeInputLanguageTag?.substringBefore('-')
+        val highConfidenceDetected = guess.languageTag?.takeIf { guess.confidence >= 0.80f }
+
+        val sourceForTranslation = highConfidenceDetected
+            ?: configuredSource
+            ?: guess.languageTag
+
+        val displayedLanguage = guess.languageTag
+            ?: configuredSource
+
         val target = targetLanguage.value
 
         _pipeline.value = _pipeline.value.copy(
             stage = "Translation",
-            detectedLanguage = detected
+            detectedLanguage = displayedLanguage
         )
 
-        val translated = if (detected == null || detected == target) {
-            text
-        } else {
-            language.translate(
-                text = text,
-                sourceTag = detected,
-                targetTag = target,
-                allowModelDownload = false
-            ).getOrElse {
-                _events.tryEmit(it.message ?: "Translation unavailable")
+        val translated = when {
+            sourceForTranslation == null -> {
+                _events.tryEmit("Language confidence too low; translation skipped for this segment.")
                 null
+            }
+            sourceForTranslation == target -> text
+            else -> {
+                language.translate(
+                    text = text,
+                    sourceTag = sourceForTranslation,
+                    targetTag = target,
+                    allowModelDownload = false
+                ).getOrElse {
+                    _events.tryEmit(it.message ?: "Translation unavailable")
+                    null
+                }
             }
         }
 
@@ -202,7 +260,7 @@ class BudsIAViewModel @Inject constructor(
         val item = ConversationItem(
             speakerLabel = "Speaker A",
             originalText = text,
-            languageTag = detected,
+            languageTag = displayedLanguage,
             translatedText = translated,
             recognitionConfidence = confidence,
             signals = signals
@@ -214,15 +272,15 @@ class BudsIAViewModel @Inject constructor(
         _pipeline.value = _pipeline.value.copy(
             running = continuous,
             stage = if (continuous) "Listening" else "Idle",
-            detectedLanguage = detected,
+            detectedLanguage = displayedLanguage,
             translationTarget = target,
             lastItem = item,
             error = null
         )
+    }
 
-        if (continuous) {
-            delay(350)
-            speech.start()
-        }
+    override fun onCleared() {
+        speech.stopContinuous()
+        super.onCleared()
     }
 }
