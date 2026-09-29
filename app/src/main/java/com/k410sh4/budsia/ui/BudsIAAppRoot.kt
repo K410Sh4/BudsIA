@@ -133,6 +133,9 @@ private fun LiveScreen(vm: BudsIAViewModel) {
     val session by vm.sessionItems.collectAsState()
     val speechModels by vm.speechLanguageModels.collectAsState()
     val translationMode by vm.translationMode.collectAsState()
+    val advancedMode by vm.advancedSpeakerMode.collectAsState()
+    val advancedState by vm.advancedSpeakerState.collectAsState()
+    val advancedModels by vm.advancedModelState.collectAsState()
     var inputLanguage by remember { mutableStateOf("system") }
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -150,6 +153,48 @@ private fun LiveScreen(vm: BudsIAViewModel) {
                         Text(pipeline.stage, color = TextMuted)
                     }
                     CapabilityStatePill(AiCapability("Voz", if (speech.available) AiCapabilityState.READY else AiCapabilityState.UNAVAILABLE, ""))
+                }
+            }
+        }
+        item {
+            GlassCard {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Separação de falantes", fontWeight = FontWeight.Bold)
+                        Text(
+                            if (advancedMode)
+                                "AudioRecord + VAD + Whisper + impressão de voz"
+                            else
+                                "Modo compatível do Android: sem identificação real de falantes",
+                            color = TextMuted,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    Switch(
+                        checked = advancedMode,
+                        onCheckedChange = vm::setAdvancedSpeakerMode,
+                        enabled = advancedModels.status == AdvancedModelStatus.READY && !pipeline.running
+                    )
+                }
+                if (advancedMode) {
+                    Spacer(Modifier.height(8.dp))
+                    ValueRow("Falantes detectados", advancedState.speakerCount.toString())
+                    Text(
+                        "Experimental: os rótulos A/B/C são obtidos da similaridade acústica da voz. Ainda não são nomes de pessoas cadastradas.",
+                        color = Amber,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                } else if (advancedModels.status != AdvancedModelStatus.READY) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Para ativar, instale o Motor avançado na tela Modelos.",
+                        color = Amber,
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
             }
         }
@@ -181,27 +226,36 @@ private fun LiveScreen(vm: BudsIAViewModel) {
         }
         item {
             GlassCard {
-                Text("Idioma esperado da entrada", fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("system" to "Sistema", "pt-BR" to "PT", "en-US" to "EN", "es-ES" to "ES").forEach { (tag, label) ->
-                        FilterChip(
-                            selected = inputLanguage == tag,
-                            onClick = { inputLanguage = tag },
-                            label = { Text(label) }
-                        )
+                if (advancedMode) {
+                    Text("Idioma da entrada", fontWeight = FontWeight.Bold)
+                    Text(
+                        "Automático pelo Whisper multilíngue. Cada falante pode falar um idioma diferente; a rota de tradução é decidida separadamente em cada fala.",
+                        color = TextMuted,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                } else {
+                    Text("Idioma esperado da entrada", fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf("system" to "Sistema", "pt-BR" to "PT", "en-US" to "EN", "es-ES" to "ES").forEach { (tag, label) ->
+                            FilterChip(
+                                selected = inputLanguage == tag,
+                                onClick = { inputLanguage = tag },
+                                label = { Text(label) }
+                            )
+                        }
                     }
+                    val selectedTag = inputLanguage.takeUnless { it == "system" }
+                    val model = selectedTag?.let { speechModels[it] }
+                    if (selectedTag != null && model != null) {
+                        SpeechModelStatusRow(model) { vm.downloadSpeechModel(selectedTag) }
+                    }
+                    Text(
+                        "A detecção do idioma usa confiança. Ao escolher PT/EN/ES, o Android também recebe essa dica para o modelo de voz offline.",
+                        color = TextMuted,
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
-                val selectedTag = inputLanguage.takeUnless { it == "system" }
-                val model = selectedTag?.let { speechModels[it] }
-                if (selectedTag != null && model != null) {
-                    SpeechModelStatusRow(model) { vm.downloadSpeechModel(selectedTag) }
-                }
-                Text(
-                    "A detecção do idioma usa confiança. Ao escolher PT/EN/ES, o Android também recebe essa dica para o modelo de voz offline.",
-                    color = TextMuted,
-                    style = MaterialTheme.typography.bodySmall
-                )
             }
         }
         item {
@@ -215,7 +269,11 @@ private fun LiveScreen(vm: BudsIAViewModel) {
                         }
                     },
                     modifier = Modifier.fillMaxWidth().height(58.dp),
-                    enabled = speech.available
+                    enabled = if (advancedMode) {
+                        advancedModels.status == AdvancedModelStatus.READY
+                    } else {
+                        speech.available
+                    }
                 ) {
                     Icon(Icons.Rounded.Mic, null)
                     Spacer(Modifier.width(8.dp))
@@ -346,15 +404,7 @@ private fun ModelsScreen(vm: BudsIAViewModel) {
             }
         }
         item { CapabilityCard(capabilities.speakerDiarization) }
-        item {
-            GlassCard {
-                Text("Diarização de falantes", fontWeight = FontWeight.Bold)
-                Text(
-                    "A versão atual recebe texto do SpeechRecognizer do Android, que não entrega a voz bruta necessária para separar Falante A/B com segurança. O modo avançado será migrado para AudioRecord + sherpa-onnx para fazer diarização offline real.",
-                    color = TextMuted
-                )
-            }
-        }
+        item { AdvancedModelsCard(vm) }
         item { CapabilityCard(capabilities.speakerIdentification) }
         item { CapabilityCard(capabilities.localLlm) }
     }
@@ -418,6 +468,13 @@ private fun ConversationCard(item: ConversationItem, compact: Boolean = false) {
             }
             Text(SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(item.timestamp)), color = TextMuted, style = MaterialTheme.typography.labelSmall)
         }
+        item.speakerSimilarity?.let { similarity ->
+            Text(
+                "Similaridade da voz: " + (similarity * 100).toInt() + "%",
+                color = Green,
+                style = MaterialTheme.typography.labelSmall
+            )
+        }
         Spacer(Modifier.height(8.dp))
         Text(item.originalText, style = if (compact) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.titleMedium)
 
@@ -463,6 +520,75 @@ private fun TranslationModeChip(label: String, selected: Boolean, onClick: () ->
     FilterChip(selected = selected, onClick = onClick, label = { Text(label) }, leadingIcon = {
         Icon(Icons.Rounded.SwapHoriz, null, modifier = Modifier.size(18.dp))
     })
+}
+
+@Composable
+private fun AdvancedModelsCard(vm: BudsIAViewModel) {
+    val model by vm.advancedModelState.collectAsState()
+    val advancedMode by vm.advancedSpeakerMode.collectAsState()
+
+    GlassCard {
+        Text("Motor avançado de falantes", fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            when (model.status) {
+                AdvancedModelStatus.READY -> "INSTALADO • funciona offline depois do download"
+                AdvancedModelStatus.DOWNLOADING -> model.message
+                AdvancedModelStatus.ERROR -> "ERRO • " + model.message
+                AdvancedModelStatus.NOT_INSTALLED -> "NÃO INSTALADO • pacote opcional grande"
+            },
+            color = when (model.status) {
+                AdvancedModelStatus.READY -> Green
+                AdvancedModelStatus.DOWNLOADING -> Cyan
+                AdvancedModelStatus.ERROR -> Red
+                AdvancedModelStatus.NOT_INSTALLED -> Amber
+            },
+            style = MaterialTheme.typography.bodySmall
+        )
+        Text(
+            "Inclui Silero VAD, Whisper Tiny multilíngue e ERes2Net para separar vozes em Falante A/B/C e detectar o idioma de cada fala.",
+            color = TextMuted,
+            style = MaterialTheme.typography.bodySmall
+        )
+
+        if (model.status == AdvancedModelStatus.DOWNLOADING) {
+            Spacer(Modifier.height(10.dp))
+            LinearProgressIndicator(
+                progress = { model.progress },
+                modifier = Modifier.fillMaxWidth()
+            )
+            model.currentFile?.let {
+                Text(it, color = TextMuted, style = MaterialTheme.typography.labelSmall)
+            }
+        }
+
+        Spacer(Modifier.height(10.dp))
+        when (model.status) {
+            AdvancedModelStatus.NOT_INSTALLED,
+            AdvancedModelStatus.ERROR -> {
+                Button(onClick = vm::installAdvancedModels, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Rounded.Download, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("INSTALAR MOTOR AVANÇADO")
+                }
+            }
+            AdvancedModelStatus.READY -> {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CapabilityStatePill(
+                        AiCapability(
+                            "Falantes",
+                            AiCapabilityState.EXPERIMENTAL,
+                            ""
+                        )
+                    )
+                    if (!advancedMode) {
+                        TextButton(onClick = vm::removeAdvancedModels) { Text("Remover modelos") }
+                    }
+                }
+            }
+            AdvancedModelStatus.DOWNLOADING -> Unit
+        }
+    }
 }
 
 @Composable
