@@ -31,7 +31,7 @@ class ExplainableDiscourseAnalyzer @Inject constructor() {
                 Regex("""\b(if you really (loved|cared)|after everything i did)\b""", RegexOption.IGNORE_CASE)
             ),
             .82f,
-            "The request is tied to affection, loyalty or indebtedness, which can create guilt pressure."
+            "The request is tied to affection, loyalty or indebtedness, which can create guilt pressure. This is a linguistic cue, not proof of manipulation or hidden intent."
         ),
         Rule(
             SignalType.FALSE_DILEMMA,
