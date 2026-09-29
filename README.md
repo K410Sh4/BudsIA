@@ -17,7 +17,7 @@ The application is designed so that unsupported or unfinished AI features are ne
 
 ## Current version
 
-**0.1.0-alpha**
+**0.2.0-alpha**
 
 Implemented now:
 
@@ -30,9 +30,11 @@ Implemented now:
 - DataStore
 - Coroutines / Flow / StateFlow
 - Android on-device SpeechRecognizer capability detection
+- stable continuous local speech loop with automatic recovery from client/busy errors
+- offline speech-language model detection and explicit download for PT-BR / EN-US / ES-ES
 - local speech recognition when Android exposes an on-device recognizer
 - contextual microphone permission
-- ML Kit bundled language identification
+- ML Kit bundled language identification with confidence filtering
 - ML Kit on-device translation
 - explicit translation-model downloads
 - strict offline live-session mode
@@ -40,6 +42,7 @@ Implemented now:
 - in-memory session timeline
 - explainable rule-based discourse analysis
 - evidence + confidence for every detected signal
+- custom BudsIA visual identity, launcher icon and Android 12+ splash screen
 - premium dark UI
 - GitHub Actions APK build
 - unit tests
@@ -183,7 +186,14 @@ Controls:
 
 Speech → language ID → translation → explainable rule analysis → timeline.
 
-### V0.2
+### V0.2 — current stabilization
+
+- continuous SpeechRecognizer lifecycle recovery
+- Android offline speech model manager
+- language confidence calibration
+- custom BudsIA visual identity
+
+### V0.3
 
 - local VAD
 - speaker diarization
@@ -192,7 +202,7 @@ Speech → language ID → translation → explainable rule analysis → timelin
 - speaker A/B/name timeline
 - audio-device routing improvements
 
-### V0.3
+### V0.4
 
 - Gemini Nano capability probe
 - LiteRT-LM fallback
@@ -201,7 +211,7 @@ Speech → language ID → translation → explainable rule analysis → timelin
 - confidence calibration
 - context-window analysis
 
-### V0.4
+### V0.5
 
 - user corrections
 - local personalization memory
