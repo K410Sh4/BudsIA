@@ -52,6 +52,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.k410sh4.budsia.core.ai.adaptation.AcousticEnvironment
+import com.k410sh4.budsia.core.ai.adaptation.AdaptiveAudioProfile
 import com.k410sh4.budsia.core.ai.enhancement.NeuralPipelineState
 import com.k410sh4.budsia.core.ai.models.ModelInstallState
 import com.k410sh4.budsia.core.audio.model.PipelineState
@@ -554,10 +555,8 @@ private fun AdaptiveProfileCard(
                     onPreferredStrengthChanged(sliderValue)
                 },
                 valueRange =
-                    com.k410sh4.budsia.core.ai.adaptation.AdaptiveAudioProfile
-                        .MIN_PREFERRED_STRENGTH..
-                        com.k410sh4.budsia.core.ai.adaptation.AdaptiveAudioProfile
-                            .MAX_PREFERRED_STRENGTH
+                    AdaptiveAudioProfile.MIN_PREFERRED_STRENGTH..
+                        AdaptiveAudioProfile.MAX_PREFERRED_STRENGTH
             )
 
             Text(
