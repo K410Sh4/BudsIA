@@ -118,18 +118,18 @@ class AndroidAudioRouteController(
 
     @Synchronized
     override fun release() {
+        if (!ownsCommunicationMode) return
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             runCatching {
                 audioManager.clearCommunicationDevice()
             }
         }
 
-        if (ownsCommunicationMode) {
-            runCatching {
-                audioManager.mode = AudioManager.MODE_NORMAL
-            }
-            ownsCommunicationMode = false
+        runCatching {
+            audioManager.mode = AudioManager.MODE_NORMAL
         }
+        ownsCommunicationMode = false
     }
 
     private fun hasBluetoothConnectPermission(): Boolean =
