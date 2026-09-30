@@ -85,7 +85,7 @@ class PreferencesAdaptiveProfileRepository(
         return updated
     }
 
-    override suspend fun setEnhancementMix(
+    override suspend fun setPreferredEnhancementStrength(
         value: Float
     ): AdaptiveAudioProfile {
         var updated = _activeProfile.value
@@ -95,9 +95,9 @@ class PreferencesAdaptiveProfileRepository(
             val current = readProfile(preferences, environment)
             updated = current.copy(
                 revision = current.revision + 1L,
-                enhancementMix = value.coerceIn(
-                    AdaptiveAudioProfile.MIN_ENHANCEMENT_MIX,
-                    AdaptiveAudioProfile.MAX_ENHANCEMENT_MIX
+                preferredEnhancementStrength = value.coerceIn(
+                    AdaptiveAudioProfile.MIN_PREFERRED_STRENGTH,
+                    AdaptiveAudioProfile.MAX_PREFERRED_STRENGTH
                 )
             )
             writeProfile(preferences, updated)
@@ -143,12 +143,12 @@ class PreferencesAdaptiveProfileRepository(
             return AdaptiveAudioProfile.factory(environment)
         }
 
-        val mix = (
-            preferences[mixKey(environment)]
-                ?: AdaptiveAudioProfile.DEFAULT_ENHANCEMENT_MIX
+        val strength = (
+            preferences[strengthKey(environment)]
+                ?: AdaptiveAudioProfile.DEFAULT_PREFERRED_STRENGTH
             ).coerceIn(
-                AdaptiveAudioProfile.MIN_ENHANCEMENT_MIX,
-                AdaptiveAudioProfile.MAX_ENHANCEMENT_MIX
+                AdaptiveAudioProfile.MIN_PREFERRED_STRENGTH,
+                AdaptiveAudioProfile.MAX_PREFERRED_STRENGTH
             )
 
         val feedbackCount =
@@ -165,7 +165,7 @@ class PreferencesAdaptiveProfileRepository(
             revision = (
                 preferences[revisionKey(environment)] ?: 0L
                 ).coerceAtLeast(0L),
-            enhancementMix = mix,
+            preferredEnhancementStrength = mix,
             feedbackCount = feedbackCount,
             positiveFeedbackCount = positiveCount
         )
@@ -177,8 +177,8 @@ class PreferencesAdaptiveProfileRepository(
     ) {
         preferences[schemaKey(profile.environment)] =
             profile.schemaVersion
-        preferences[mixKey(profile.environment)] =
-            profile.enhancementMix
+        preferences[strengthKey(profile.environment)] =
+            profile.preferredEnhancementStrength
         preferences[revisionKey(profile.environment)] =
             profile.revision
         preferences[feedbackCountKey(profile.environment)] =
@@ -192,9 +192,9 @@ class PreferencesAdaptiveProfileRepository(
             "${environment.keyPrefix()}_schema"
         )
 
-    private fun mixKey(environment: AcousticEnvironment) =
+    private fun strengthKey(environment: AcousticEnvironment) =
         floatPreferencesKey(
-            "${environment.keyPrefix()}_mix"
+            "${environment.keyPrefix()}_preferred_strength"
         )
 
     private fun revisionKey(environment: AcousticEnvironment) =
