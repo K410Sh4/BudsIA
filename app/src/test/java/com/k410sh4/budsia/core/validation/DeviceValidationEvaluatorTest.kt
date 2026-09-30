@@ -3,6 +3,7 @@ package com.k410sh4.budsia.core.validation
 import com.k410sh4.budsia.core.ai.enhancement.NeuralPipelineState
 import com.k410sh4.budsia.core.audio.realtime.RealtimeEngineState
 import com.k410sh4.budsia.core.audio.realtime.RealtimeProcessingMode
+import com.k410sh4.budsia.core.performance.AiPerformanceTier
 import com.k410sh4.budsia.core.performance.ThermalLevel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -125,6 +126,86 @@ class DeviceValidationEvaluatorTest {
     }
 
     @Test
+    fun aiValidationFailsWhenGovernorRequestsFallback() {
+        val samples = listOf(
+            sample(
+                elapsedMs = 0,
+                inputFrames = 0,
+                processingMode = RealtimeProcessingMode.AI,
+                neuralState = NeuralPipelineState.RUNNING,
+                neuralRate = 48_000,
+                rtf = 0.6
+            ),
+            sample(
+                elapsedMs = 30_000,
+                inputFrames = 1_440_000,
+                processingMode = RealtimeProcessingMode.AI,
+                neuralState = NeuralPipelineState.RUNNING,
+                neuralRate = 48_000,
+                rtf = 0.7,
+                performanceTier =
+                    AiPerformanceTier.DSP_ONLY,
+                performanceForceFallback = true
+            )
+        )
+
+        val report = evaluator.evaluate(
+            requestedMode = RealtimeProcessingMode.AI,
+            samples = samples
+        )
+
+        assertEquals(ValidationStatus.FAIL, report.overallStatus)
+        assertTrue(report.performanceForceFallbackObserved)
+        assertTrue(
+            report.checks.any {
+                it.id == "performance_policy" &&
+                    it.status == ValidationStatus.FAIL
+            }
+        )
+    }
+
+    @Test
+    fun reportCapturesAdaptiveCandidateRange() {
+        val report = evaluator.evaluate(
+            requestedMode = RealtimeProcessingMode.AI,
+            samples = listOf(
+                sample(
+                    elapsedMs = 0,
+                    inputFrames = 0,
+                    processingMode = RealtimeProcessingMode.AI,
+                    neuralState = NeuralPipelineState.RUNNING,
+                    neuralRate = 48_000,
+                    rtf = 0.5,
+                    adaptiveControlActive = true,
+                    adaptiveStrength = 0.60f
+                ),
+                sample(
+                    elapsedMs = 30_000,
+                    inputFrames = 1_440_000,
+                    processingMode = RealtimeProcessingMode.AI,
+                    neuralState = NeuralPipelineState.RUNNING,
+                    neuralRate = 48_000,
+                    rtf = 0.6,
+                    adaptiveControlActive = true,
+                    adaptiveStrength = 0.80f
+                )
+            )
+        )
+
+        assertTrue(report.adaptiveControlObserved)
+        assertEquals(
+            0.60f,
+            report.adaptiveStrengthRange?.start ?: -1f,
+            0.0001f
+        )
+        assertEquals(
+            0.80f,
+            report.adaptiveStrengthRange?.endInclusive ?: -1f,
+            0.0001f
+        )
+    }
+
+    @Test
     fun outputUnderrunsAreUnknownWhenMonitorIsOff() {
         val report = evaluator.evaluate(
             requestedMode = RealtimeProcessingMode.DSP,
@@ -159,7 +240,15 @@ class DeviceValidationEvaluatorTest {
             NeuralPipelineState.IDLE,
         neuralRate: Int? = null,
         rtf: Double? = null,
-        thermal: ThermalLevel = ThermalLevel.NONE
+        thermal: ThermalLevel = ThermalLevel.NONE,
+        thermalForecast: Float? = 0.30f,
+        cpuHeadroom: Float? = 60f,
+        powerSave: Boolean? = false,
+        performanceTier: AiPerformanceTier? =
+            AiPerformanceTier.BALANCED,
+        performanceForceFallback: Boolean = false,
+        adaptiveControlActive: Boolean = false,
+        adaptiveStrength: Float = 1f
     ): DeviceValidationSample =
         DeviceValidationSample(
             elapsedMs = elapsedMs,
@@ -183,7 +272,15 @@ class DeviceValidationEvaluatorTest {
             neuralRequiredSampleRateHz = neuralRate,
             neuralRealtimeFactor = rtf,
             thermalLevel = thermal,
+            thermalHeadroomForecast10s = thermalForecast,
+            cpuHeadroomPercent = cpuHeadroom,
             batteryPercent = 80,
-            processCpuPercent = 20.0
+            powerSaveMode = powerSave,
+            processCpuPercent = 20.0,
+            performanceTier = performanceTier,
+            performanceForceFallback =
+                performanceForceFallback,
+            adaptiveControlActive = adaptiveControlActive,
+            adaptiveStrength = adaptiveStrength
         )
 }
