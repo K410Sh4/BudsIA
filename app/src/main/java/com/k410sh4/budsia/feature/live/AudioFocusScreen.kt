@@ -103,7 +103,11 @@ fun AudioFocusRoute(
         onMoreFilter = viewModel::teachMoreFilter,
         onMoreNatural = viewModel::teachMoreNatural,
         onGoodAsIs = viewModel::teachGoodAsIs,
-        onResetProfile = viewModel::resetAdaptiveProfile
+        onResetProfile = viewModel::resetAdaptiveProfile,
+        onLowBatteryFallbackChanged =
+            viewModel::setLowBatteryAutoFallbackEnabled,
+        onStopBatteryPercentChanged =
+            viewModel::setStopAiBelowBatteryPercent
     )
 }
 
@@ -127,7 +131,9 @@ private fun AudioFocusScreen(
     onMoreFilter: () -> Unit,
     onMoreNatural: () -> Unit,
     onGoodAsIs: () -> Unit,
-    onResetProfile: () -> Unit
+    onResetProfile: () -> Unit,
+    onLowBatteryFallbackChanged: (Boolean) -> Unit,
+    onStopBatteryPercentChanged: (Int) -> Unit
 ) {
     val active = state.pipelineState == PipelineState.LISTENING ||
         state.pipelineState == PipelineState.STARTING ||
@@ -205,7 +211,13 @@ private fun AudioFocusScreen(
             onResetProfile = onResetProfile
         )
 
-        PerformanceCard(state)
+        PerformanceCard(
+            state = state,
+            onLowBatteryFallbackChanged =
+                onLowBatteryFallbackChanged,
+            onStopBatteryPercentChanged =
+                onStopBatteryPercentChanged
+        )
 
         if (
             state.neuralTelemetry.state != NeuralPipelineState.IDLE ||
@@ -610,10 +622,21 @@ private fun AdaptiveProfileCard(
 
 @Composable
 private fun PerformanceCard(
-    state: AudioFocusUiState
+    state: AudioFocusUiState,
+    onLowBatteryFallbackChanged: (Boolean) -> Unit,
+    onStopBatteryPercentChanged: (Int) -> Unit
 ) {
     val snapshot = state.performanceSnapshot
     val decision = state.performanceDecision
+    val settings = state.performanceSettings
+
+    var stopPercent by remember(
+        settings.stopAiBelowBatteryPercent
+    ) {
+        mutableFloatStateOf(
+            settings.stopAiBelowBatteryPercent.toFloat()
+        )
+    }
 
     Card(
         colors = CardDefaults.cardColors(
@@ -666,6 +689,48 @@ private fun PerformanceCard(
                         snapshot.processCpuPercent.kind.name
                     )
                 } ?: "UNKNOWN"
+            )
+
+            HorizontalDivider()
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Pausar IA com bateria baixa")
+                    Text(
+                        text = "Limite configurável; proteção térmica e memória baixa continuam obrigatórias.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp
+                    )
+                }
+                Switch(
+                    checked =
+                        settings.lowBatteryAutoFallbackEnabled,
+                    onCheckedChange =
+                        onLowBatteryFallbackChanged
+                )
+            }
+
+            MetricRow(
+                "Limite de bateria",
+                "${stopPercent.toInt()}%"
+            )
+
+            Slider(
+                value = stopPercent,
+                onValueChange = { stopPercent = it },
+                onValueChangeFinished = {
+                    onStopBatteryPercentChanged(
+                        stopPercent.toInt()
+                    )
+                },
+                enabled =
+                    settings.lowBatteryAutoFallbackEnabled,
+                valueRange = 5f..30f,
+                steps = 24
             )
 
             decision?.let {
