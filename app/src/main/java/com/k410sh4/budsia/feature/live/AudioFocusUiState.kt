@@ -11,6 +11,7 @@ import com.k410sh4.budsia.core.audio.routing.AudioDeviceDescriptor
 import com.k410sh4.budsia.core.performance.AiPerformanceDecision
 import com.k410sh4.budsia.core.performance.AiPerformanceSettings
 import com.k410sh4.budsia.core.performance.DevicePerformanceSnapshot
+import com.k410sh4.budsia.core.validation.DeviceValidationUiState
 
 data class AudioFocusUiState(
     val pipelineState: PipelineState = PipelineState.IDLE,
@@ -35,5 +36,7 @@ data class AudioFocusUiState(
     val performanceSettings: AiPerformanceSettings =
         AiPerformanceSettings(),
     val performanceDecision: AiPerformanceDecision? = null,
+    val validation: DeviceValidationUiState =
+        DeviceValidationUiState(),
     val errorMessage: String? = null
 )
