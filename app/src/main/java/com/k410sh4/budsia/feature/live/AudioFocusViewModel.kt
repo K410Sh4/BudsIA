@@ -539,6 +539,7 @@ class AudioFocusViewModel @Inject constructor(
     }
 
     fun installAiModel() {
+        if (!validationMutationAllowed()) return
         if (modelJob?.isActive == true) return
 
         modelJob = viewModelScope.launch(Dispatchers.IO) {
@@ -567,6 +568,7 @@ class AudioFocusViewModel @Inject constructor(
     }
 
     fun removeAiModel() {
+        if (!validationMutationAllowed()) return
         if (modelJob?.isActive == true) return
 
         if (
