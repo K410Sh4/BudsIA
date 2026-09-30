@@ -48,6 +48,9 @@ callback.
 - independent versioned profiles for Geral / Casa / Rua / Trabalho / Carro
 - bounded explicit feedback learning: Mais filtro / Mais natural / Está bom assim
 - no silent model-weight training
+- opt-in realtime adaptive dry/wet control
+- allocation-free adaptive mixing in the AI worker
+- immediate rollback to 100% verified neural output
 
 ## Sample-rate-aware AI
 
@@ -79,9 +82,10 @@ BudsIA now stores explicit listening preferences per acoustic environment in app
 DataStore. The tuner uses a bounded decaying step, so repeated feedback changes the preferred
 strength progressively less over time.
 
-This is intentionally a **preference-learning layer**, not hidden model retraining. The
-stored preference does not automatically change realtime audio yet. A future profile-to-audio
-mapping must pass physical A/B validation and retain a factory rollback path before activation.
+This remains **preference learning**, not hidden model retraining. A separate experimental
+toggle can now apply the stored preference as a deterministic dry/wet mix between the original
+frame and verified neural output. It is OFF by default, allocation-free in the realtime worker,
+fully observable in telemetry, and can be rolled back instantly without modifying the model.
 
 ## Validation status
 
@@ -101,4 +105,5 @@ device-specific latency remain device-validation pending.
 - `docs/adr/0002-neural-runtime.md`
 - `docs/adr/0003-explicit-bluetooth-routing.md`
 - `docs/adr/0004-local-adaptive-profiles.md`
+- `docs/adr/0005-adaptive-runtime-control.md`
 - `docs/ADAPTIVE_PROFILES.md`
