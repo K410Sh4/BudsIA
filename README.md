@@ -67,15 +67,27 @@ Current neural baseline:
 The app does **not** claim device-specific latency or quality until physical-device validation
 has been completed.
 
+## Adaptive profiles
+
+Phase D now includes a versioned local preference layer for Geral, Casa, Rua, Trabalho and
+Carro. Explicit feedback ("mais filtro", "mais natural", "está bom assim") updates a bounded
+preference with a decaying learning step and persists it transactionally with DataStore 1.2.1.
+
+The factory neural model remains immutable. Learned preferences are intentionally **not**
+allowed to change live neural output automatically until an alignment-safe A/B evaluation
+mechanism is verified. This avoids introducing phase artifacts or model drift under the label
+of personalization.
+
 ## Next phase
 
-Adaptive profiles will add versioned local preferences and environment-specific behavior
-without modifying the immutable factory model.
+Build the local evaluation gate that can compare candidate adaptive behavior against factory
+behavior and promote or roll it back from measured results.
 
 ## Documentation
 
 - `docs/ARCHITECTURE.md`
 - `docs/AUDIO_PIPELINE.md`
+- `docs/ADAPTIVE_PROFILES.md`
 - `docs/ROADMAP.md`
 - `docs/TECHNOLOGY_BASELINE_2026.md`
 - `docs/adr/0001-native-realtime-core.md`
