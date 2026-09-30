@@ -113,9 +113,19 @@ class AudioFocusViewModel @Inject constructor(
         }
 
         sessionJob = viewModelScope.launch(Dispatchers.Default) {
+            // Never open the native stream directly in AI mode. Model loading
+            // and integrity checks can take longer than the realtime ring.
+            // Start on deterministic DSP, then let StreamingAiCoordinator
+            // atomically switch the engine to AI only after the model is ready.
+            val bootMode = if (initialMode == RealtimeProcessingMode.AI) {
+                RealtimeProcessingMode.DSP
+            } else {
+                initialMode
+            }
+
             val startResult = realtimeAudioEngine.start(
                 RealtimeAudioConfig(
-                    processingMode = initialMode
+                    processingMode = bootMode
                 )
             )
 
