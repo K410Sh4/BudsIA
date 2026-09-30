@@ -3,6 +3,9 @@ package com.k410sh4.budsia.feature.live
 import com.k410sh4.budsia.core.ai.adaptation.AcousticEnvironment
 import com.k410sh4.budsia.core.ai.adaptation.AdaptiveAudioProfile
 import com.k410sh4.budsia.core.ai.enhancement.NeuralRuntimeTelemetry
+import com.k410sh4.budsia.core.ai.evaluation.AdaptiveAbAssessment
+import com.k410sh4.budsia.core.ai.evaluation.AdaptiveAbStats
+import com.k410sh4.budsia.core.ai.evaluation.AdaptiveAbVariant
 import com.k410sh4.budsia.core.ai.models.ModelInstallStatus
 import com.k410sh4.budsia.core.audio.model.PipelineState
 import com.k410sh4.budsia.core.audio.realtime.RealtimeAudioSnapshot
@@ -30,6 +33,13 @@ data class AudioFocusUiState(
     val adaptiveProfile: AdaptiveAudioProfile =
         AdaptiveAudioProfile.factory(AcousticEnvironment.GENERAL),
     val adaptiveControlCandidateEnabled: Boolean = false,
+    val adaptiveAbStats: AdaptiveAbStats =
+        AdaptiveAbStats.empty(AcousticEnvironment.GENERAL),
+    val adaptiveAbAssessment: AdaptiveAbAssessment? = null,
+    val adaptiveAbAuditionVariant: AdaptiveAbVariant =
+        AdaptiveAbVariant.FACTORY,
+    val adaptiveAbFactoryAuditioned: Boolean = false,
+    val adaptiveAbCandidateAuditioned: Boolean = false,
     val performanceSnapshot: DevicePerformanceSnapshot =
         DevicePerformanceSnapshot(),
     val performanceSettings: AiPerformanceSettings =
