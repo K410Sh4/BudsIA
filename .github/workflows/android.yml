@@ -8,6 +8,10 @@ on:
   pull_request:
   workflow_dispatch:
 
+concurrency:
+  group: android-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -57,6 +61,10 @@ jobs:
       - name: Unit tests
         run: gradle :app:testDebugUnitTest --stacktrace
 
+      - name: Verify Room schema generated
+        run: |
+          test -n "$(find app/schemas -name '*.json' -print -quit)"
+
       - name: Debug APK
         run: gradle :app:assembleDebug --stacktrace
 
@@ -71,6 +79,13 @@ jobs:
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: BudsIA-V3-streaming-ai-debug
+          name: BudsIA-V3-adaptive-ai-debug
           path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      - name: Upload Room schema
+        uses: actions/upload-artifact@v4
+        with:
+          name: BudsIA-V3-room-schema
+          path: app/schemas/**/*.json
           if-no-files-found: error
