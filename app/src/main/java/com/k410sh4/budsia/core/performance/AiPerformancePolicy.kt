@@ -18,19 +18,33 @@ class AiPerformancePolicy {
     fun decide(
         health: DeviceHealthSnapshot
     ): AiPerformanceDecision {
+        val thermalCritical = health.thermalSeverity in setOf(
+            ThermalSeverity.SEVERE,
+            ThermalSeverity.CRITICAL,
+            ThermalSeverity.EMERGENCY,
+            ThermalSeverity.SHUTDOWN
+        )
+
         if (
-            health.thermalSeverity >= ThermalSeverity.SEVERE ||
+            thermalCritical ||
+            health.lowMemory ||
             (health.thermalHeadroomForecast10s ?: 0f) >= 0.98f
         ) {
             return AiPerformanceDecision(
                 level = AiPerformanceLevel.DSP_ONLY,
                 preferPowerEfficiency = true,
-                reason = "Proteção térmica: IA suspensa antes de throttling severo."
+                reason = when {
+                    health.lowMemory ->
+                        "Proteção de memória: IA suspensa para liberar o modelo."
+                    thermalCritical ->
+                        "Proteção térmica: IA suspensa antes de throttling severo."
+                    else ->
+                        "Proteção térmica preventiva: previsão próxima do limite severo."
+                }
             )
         }
 
         if (
-            health.lowMemory ||
             health.thermalSeverity == ThermalSeverity.MODERATE ||
             (health.thermalHeadroomForecast10s ?: 0f) >= 0.88f ||
             (
@@ -42,7 +56,21 @@ class AiPerformancePolicy {
             return AiPerformanceDecision(
                 level = AiPerformanceLevel.ECO,
                 preferPowerEfficiency = true,
-                reason = "Carga reduzida para preservar estabilidade, memória, bateria ou margem térmica."
+                reason = "Carga reduzida para preservar estabilidade, temperatura ou bateria."
+            )
+        }
+
+        val cpuConstrained =
+            health.cpuHeadroomPercent != null &&
+                health.cpuHeadroomPercent <= 10f
+
+        if (cpuConstrained) {
+            return AiPerformanceDecision(
+                level = AiPerformanceLevel.BALANCED,
+                // Low CPU headroom means the current periodic inference needs
+                // performance more than power-efficient core placement.
+                preferPowerEfficiency = false,
+                reason = "CPU com pouca margem; prioridade mantida para cumprir o prazo da inferência."
             )
         }
 
@@ -66,7 +94,7 @@ class AiPerformancePolicy {
         return AiPerformanceDecision(
             level = AiPerformanceLevel.MAX,
             preferPowerEfficiency = false,
-            reason = "Margem térmica e energética adequada."
+            reason = "Margem térmica, energética e de CPU adequada."
         )
     }
 }
