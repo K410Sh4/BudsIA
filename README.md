@@ -48,6 +48,10 @@ callback.
 - independent versioned profiles for Geral / Casa / Rua / Trabalho / Carro
 - bounded explicit feedback learning: Mais filtro / Mais natural / Está bom assim
 - no silent model-weight training
+- measured thermal / battery / memory monitoring
+- estimated normalized BudsIA process CPU telemetry
+- automatic AI -> DSP fallback on severe thermal, low-memory or critical-battery conditions
+- explicit ECO / BALANCED / MAX_QUALITY recommendations without pretending they already change runtime behavior
 
 ## Sample-rate-aware AI
 
@@ -83,6 +87,19 @@ This is intentionally a **preference-learning layer**, not hidden model retraini
 stored preference does not automatically change realtime audio yet. A future profile-to-audio
 mapping must pass physical A/B validation and retain a factory rollback path before activation.
 
+## AI performance governor
+
+BudsIA continuously samples Android thermal, battery and memory state. Severe thermal
+pressure, Android low-memory state, or battery at/below 15% while not charging forces a safe
+AI -> DSP fallback during a live session.
+
+CPU percentage is shown as **ESTIMATED**, derived from process CPU time and elapsed wall time.
+Thermal, battery and memory values are reported from Android APIs.
+
+ECO / BALANCED / MAX_QUALITY are currently recommendations only. They are intentionally not
+used to change inference threads or providers mid-session until that behavior is measured on
+the physical target device.
+
 ## Validation status
 
 CI verifies code, model hashes/sizes, native runtime packaging, unit tests, debug APK and
@@ -101,4 +118,5 @@ device-specific latency remain device-validation pending.
 - `docs/adr/0002-neural-runtime.md`
 - `docs/adr/0003-explicit-bluetooth-routing.md`
 - `docs/adr/0004-local-adaptive-profiles.md`
+- `docs/adr/0005-ai-performance-governor.md`
 - `docs/ADAPTIVE_PROFILES.md`
