@@ -6,6 +6,9 @@ import com.k410sh4.budsia.core.audio.realtime.RealtimeAudioEngine
 import com.k410sh4.budsia.core.audio.realtime.RealtimeEngineState
 import com.k410sh4.budsia.core.audio.realtime.RealtimeProcessingMode
 import com.k410sh4.budsia.core.diagnostics.MonotonicClock
+import com.k410sh4.budsia.core.performance.AiPerformanceGovernor
+import com.k410sh4.budsia.core.performance.AiPerformanceMonitor
+import com.k410sh4.budsia.core.performance.AiPerformanceTier
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -35,6 +38,8 @@ data class NeuralRuntimeTelemetry(
     val maxInferenceMs: Double? = null,
     val averageInferenceMs: Double? = null,
     val realtimeFactor: Double? = null,
+    val recommendedPerformanceTier: AiPerformanceTier? = null,
+    val performanceReason: String? = null,
     val chunksProcessed: Long = 0L,
     val samplesEnhanced: Long = 0L,
     val enhancedRms: Float? = null,
@@ -56,15 +61,28 @@ class StreamingAiCoordinator(
     private val enhancer: StreamingNeuralEnhancer,
     private val audioEngine: RealtimeAudioEngine,
     private val transport: RealtimeAiTransport,
-    private val clock: MonotonicClock
+    private val clock: MonotonicClock,
+    private val performanceMonitor: AiPerformanceMonitor,
+    private val performanceGovernor: AiPerformanceGovernor
 ) {
     private val _telemetry = MutableStateFlow(NeuralRuntimeTelemetry())
     val telemetry: StateFlow<NeuralRuntimeTelemetry> = _telemetry.asStateFlow()
 
     suspend fun run(modelId: String) {
+        val initialDecision = performanceGovernor.decide(
+            performanceMonitor.snapshot.value
+        )
+
+        if (!initialDecision.allowAi) {
+            fallbackToDsp(initialDecision.reason)
+            return
+        }
+
         _telemetry.value = NeuralRuntimeTelemetry(
             state = NeuralPipelineState.PREPARING,
-            modelId = modelId
+            modelId = modelId,
+            recommendedPerformanceTier = initialDecision.tier,
+            performanceReason = initialDecision.reason
         )
 
         var shouldPreserveTerminalState = false
@@ -115,10 +133,23 @@ class StreamingAiCoordinator(
                 engineId = capabilities.engineId,
                 provider = capabilities.provider,
                 requiredSampleRateHz = capabilities.requiredSampleRateHz,
-                frameSamples = capabilities.recommendedFrameSamples
+                frameSamples = capabilities.recommendedFrameSamples,
+                recommendedPerformanceTier = initialDecision.tier,
+                performanceReason = initialDecision.reason
             )
 
             while (currentCoroutineContext().isActive) {
+                val performanceDecision =
+                    performanceGovernor.decide(
+                        performanceMonitor.snapshot.value
+                    )
+
+                if (performanceDecision.forceFallback) {
+                    fallbackToDsp(performanceDecision.reason)
+                    shouldPreserveTerminalState = true
+                    return
+                }
+
                 val engineSnapshot = audioEngine.snapshot()
                 check(engineSnapshot.state == RealtimeEngineState.RUNNING) {
                     "O núcleo de áudio deixou o estado RUNNING."
@@ -219,6 +250,10 @@ class StreamingAiCoordinator(
                                 chunks.toDouble() /
                                 1_000_000.0,
                         realtimeFactor = realtimeFactorEma,
+                        recommendedPerformanceTier =
+                            performanceDecision.tier,
+                        performanceReason =
+                            performanceDecision.reason,
                         chunksProcessed = chunks,
                         samplesEnhanced = enhancedSamples,
                         enhancedRms = rms(output.samples),
@@ -269,6 +304,8 @@ class StreamingAiCoordinator(
         audioEngine.setProcessingMode(RealtimeProcessingMode.DSP)
         _telemetry.value = _telemetry.value.copy(
             state = NeuralPipelineState.FALLBACK,
+            recommendedPerformanceTier = AiPerformanceTier.DSP_ONLY,
+            performanceReason = reason,
             fallbackReason = reason,
             errorMessage = reason
         )
