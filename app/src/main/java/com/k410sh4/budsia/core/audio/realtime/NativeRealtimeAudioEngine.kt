@@ -3,8 +3,10 @@ package com.k410sh4.budsia.core.audio.realtime
 import com.k410sh4.budsia.core.audio.nativecore.NativeAudioBridge
 
 class NativeRealtimeAudioEngine internal constructor(
-    private val bridge: NativeAudioBridge = NativeAudioBridge()
+    private val bridge: NativeAudioBridge
 ) : RealtimeAudioEngine, RealtimeAiTransport {
+
+    constructor() : this(NativeAudioBridge())
 
     private val handle: Long = bridge.nativeCreate().also {
         check(it != 0L) { "Unable to allocate native audio engine." }
