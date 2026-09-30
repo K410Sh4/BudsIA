@@ -206,6 +206,113 @@ class DeviceValidationEvaluatorTest {
     }
 
     @Test
+    fun aiInputDropsFailWhenNeuralTransportFallsBehind() {
+        val report = evaluator.evaluate(
+            requestedMode = RealtimeProcessingMode.AI,
+            samples = listOf(
+                sample(
+                    elapsedMs = 0,
+                    inputFrames = 0,
+                    processingMode = RealtimeProcessingMode.AI,
+                    neuralState = NeuralPipelineState.RUNNING,
+                    neuralRate = 48_000,
+                    rtf = 0.60
+                ),
+                sample(
+                    elapsedMs = 30_000,
+                    inputFrames = 1_440_000,
+                    processingMode = RealtimeProcessingMode.AI,
+                    aiInputDrops = 14_400,
+                    neuralState = NeuralPipelineState.RUNNING,
+                    neuralRate = 48_000,
+                    rtf = 0.75
+                )
+            )
+        )
+
+        assertEquals(
+            14_400L,
+            report.aiInputDroppedSamplesDelta
+        )
+        assertTrue(
+            report.checks.any {
+                it.id == "ai_input_drops" &&
+                    it.status == ValidationStatus.FAIL
+            }
+        )
+        assertEquals(
+            ValidationStatus.FAIL,
+            report.overallStatus
+        )
+    }
+
+    @Test
+    fun outputOverrunWarnsWhenPrivateMonitorCannotConsumeFastEnough() {
+        val report = evaluator.evaluate(
+            requestedMode = RealtimeProcessingMode.DSP,
+            samples = listOf(
+                sample(
+                    elapsedMs = 0,
+                    inputFrames = 0,
+                    monitoring = true
+                ),
+                sample(
+                    elapsedMs = 10_000,
+                    inputFrames = 480_000,
+                    monitoring = true,
+                    outputOverruns = 320
+                )
+            )
+        )
+
+        assertEquals(
+            320L,
+            report.outputOverrunSamplesDelta
+        )
+        assertTrue(
+            report.checks.any {
+                it.id == "output_overruns" &&
+                    it.status == ValidationStatus.WARN
+            }
+        )
+        assertEquals(
+            ValidationStatus.WARN,
+            report.overallStatus
+        )
+    }
+
+    @Test
+    fun routeDisconnectFailsTechnicalValidation() {
+        val report = evaluator.evaluate(
+            requestedMode = RealtimeProcessingMode.DSP,
+            samples = listOf(
+                sample(
+                    elapsedMs = 0,
+                    inputFrames = 0,
+                    disconnects = 3
+                ),
+                sample(
+                    elapsedMs = 10_000,
+                    inputFrames = 480_000,
+                    disconnects = 4
+                )
+            )
+        )
+
+        assertEquals(1L, report.disconnectCountDelta)
+        assertTrue(
+            report.checks.any {
+                it.id == "route_disconnects" &&
+                    it.status == ValidationStatus.FAIL
+            }
+        )
+        assertEquals(
+            ValidationStatus.FAIL,
+            report.overallStatus
+        )
+    }
+
+    @Test
     fun outputUnderrunsAreUnknownWhenMonitorIsOff() {
         val report = evaluator.evaluate(
             requestedMode = RealtimeProcessingMode.DSP,
@@ -234,7 +341,10 @@ class DeviceValidationEvaluatorTest {
         processingMode: RealtimeProcessingMode =
             RealtimeProcessingMode.DSP,
         inputDrops: Long = 0L,
+        aiInputDrops: Long = 0L,
+        outputOverruns: Long = 0L,
         outputUnderruns: Long = 0L,
+        disconnects: Long = 0L,
         monitoring: Boolean = false,
         neuralState: NeuralPipelineState =
             NeuralPipelineState.IDLE,
@@ -259,9 +369,12 @@ class DeviceValidationEvaluatorTest {
             inputFrames = inputFrames,
             outputFrames = outputFrames,
             inputDroppedSamples = inputDrops,
+            aiInputDroppedSamples = aiInputDrops,
+            outputOverrunSamples = outputOverruns,
             outputUnderrunSamples = outputUnderruns,
             inputXruns = 0,
             outputXruns = 0,
+            disconnectCount = disconnects,
             monitoringEnabled = monitoring,
             neuralState = neuralState,
             neuralModelId = if (neuralRate != null) {
