@@ -23,6 +23,6 @@ object CoroutineModule {
     @ApplicationScope
     fun provideApplicationScope(): CoroutineScope =
         CoroutineScope(
-            SupervisorJob() + Dispatchers.Default
+            SupervisorJob() + Dispatchers.IO
         )
 }
