@@ -642,12 +642,19 @@ class AudioFocusViewModel @Inject constructor(
         val startState = _uiState.value
         if (
             startState.pipelineState != PipelineState.LISTENING ||
-            startState.snapshot == null
+            startState.snapshot == null ||
+            (
+                startState.selectedMode ==
+                    RealtimeProcessingMode.AI &&
+                    startState.neuralTelemetry.state !=
+                        NeuralPipelineState.RUNNING
+                )
         ) {
             _uiState.update {
                 it.copy(
                     validation = DeviceValidationUiState(
-                        message = "Inicie o áudio antes do teste de validação."
+                        message =
+                            "Aguarde o áudio e, no modo IA, o runtime neural entrar em RUNNING antes da validação."
                     )
                 )
             }
