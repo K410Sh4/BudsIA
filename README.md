@@ -31,7 +31,11 @@ callback.
 - dedicated native processing worker
 - RAW / DSP / AI modes
 - optional live monitor restricted to private outputs
-- actual route/device IDs surfaced to Kotlin
+- selectable microphone and output routes
+- explicit Android 12+ Bluetooth communication routing via setCommunicationDevice()
+- VoiceCommunication input preset for Bluetooth headset microphones
+- actual route/device IDs surfaced to Kotlin after native stream open
+- BLUETOOTH_CONNECT runtime permission only for paired Bluetooth audio control
 - xruns when available
 - input drops / AI-input drops / output underruns / output overruns
 - measured native callback, DSP and neural inference timings
@@ -67,6 +71,17 @@ Current neural baseline:
 The app does **not** claim device-specific latency or quality until physical-device validation
 has been completed.
 
+## Bluetooth routing
+
+A connected headset is not assumed to be the active microphone. BudsIA lets the user select
+an input and output route while audio is stopped. For Bluetooth HFP/SCO or BLE-headset input
+on Android 12+, it prepares Android's communication route, then opens Oboe using the selected
+input device and reports the device that the stream actually opened.
+
+When a Bluetooth microphone is used, Android owns the paired communication output route rather
+than BudsIA trying to force a simultaneous A2DP output. Route behavior is still marked for
+physical Galaxy Buds validation.
+
 ## Next phase
 
 Adaptive profiles will add versioned local preferences and environment-specific behavior
@@ -80,3 +95,4 @@ without modifying the immutable factory model.
 - `docs/TECHNOLOGY_BASELINE_2026.md`
 - `docs/adr/0001-native-realtime-core.md`
 - `docs/adr/0002-neural-runtime.md`
+- `docs/adr/0003-explicit-bluetooth-routing.md`
