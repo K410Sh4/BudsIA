@@ -8,13 +8,21 @@ import com.k410sh4.budsia.core.audio.realtime.RealtimeAudioEngine
 import com.k410sh4.budsia.core.audio.realtime.RealtimeEngineState
 import com.k410sh4.budsia.core.audio.realtime.RealtimeProcessingMode
 import com.k410sh4.budsia.core.diagnostics.MonotonicClock
+import com.k410sh4.budsia.core.performance.AiPerformanceDecision
+import com.k410sh4.budsia.core.performance.AiPerformanceLevel
+import com.k410sh4.budsia.core.performance.AiPerformancePolicy
+import com.k410sh4.budsia.core.performance.DeviceHealthMonitor
+import com.k410sh4.budsia.core.performance.InferencePerformanceHintFactory
+import com.k410sh4.budsia.core.performance.ThermalSeverity
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import kotlin.math.sqrt
 
@@ -48,17 +56,29 @@ data class NeuralRuntimeTelemetry(
     val adaptiveEnvironment: String? = null,
     val adaptiveProfileRevision: Long? = null,
     val adaptiveBypassReason: String? = null,
+    val performanceLevel: AiPerformanceLevel = AiPerformanceLevel.MAX,
+    val performanceReason: String? = null,
+    val performanceHintSupported: Boolean = false,
+    val preferPowerEfficiency: Boolean = false,
+    val thermalSeverity: ThermalSeverity = ThermalSeverity.UNKNOWN,
+    val thermalHeadroomNow: Float? = null,
+    val thermalHeadroomForecast10s: Float? = null,
+    val cpuHeadroomPercent: Float? = null,
+    val batteryPercent: Int? = null,
+    val charging: Boolean? = null,
+    val powerSaveMode: Boolean = false,
+    val lowMemory: Boolean = false,
     val fallbackReason: String? = null,
     val errorMessage: String? = null
 )
 
 /**
- * Coordinates the non-realtime neural worker.
+ * Non-realtime neural worker.
  *
- * Oboe callbacks never invoke this class. The native input callback copies PCM
- * into a dedicated SPSC ring; this coordinator consumes complete model frames,
- * runs inference, optionally applies the explicit local adaptive dry/wet
- * control, and submits the resulting PCM to the native output ring.
+ * Oboe callbacks only move PCM through native lock-free rings. Inference runs
+ * on one long-lived dispatcher thread so Android PerformanceHintManager can
+ * track a stable TID and optimize the periodic workload without manual CPU
+ * affinity.
  */
 class StreamingAiCoordinator(
     private val modelManager: ModelManager,
@@ -67,18 +87,28 @@ class StreamingAiCoordinator(
     private val transport: RealtimeAiTransport,
     private val clock: MonotonicClock,
     private val adaptiveProfiles: AdaptiveProfileRepository,
-    private val adaptiveBlendProcessor: AdaptiveBlendProcessor
+    private val adaptiveBlendProcessor: AdaptiveBlendProcessor,
+    private val deviceHealthMonitor: DeviceHealthMonitor,
+    private val performancePolicy: AiPerformancePolicy,
+    private val performanceHintFactory: InferencePerformanceHintFactory,
+    private val inferenceDispatcher: CoroutineDispatcher
 ) {
     private val _telemetry = MutableStateFlow(NeuralRuntimeTelemetry())
     val telemetry: StateFlow<NeuralRuntimeTelemetry> = _telemetry.asStateFlow()
 
-    suspend fun run(modelId: String) {
+    suspend fun run(modelId: String) = withContext(inferenceDispatcher) {
+        runOnInferenceThread(modelId)
+    }
+
+    private suspend fun runOnInferenceThread(modelId: String) {
         _telemetry.value = NeuralRuntimeTelemetry(
             state = NeuralPipelineState.PREPARING,
             modelId = modelId
         )
 
         var shouldPreserveTerminalState = false
+        var hintSession: com.k410sh4.budsia.core.performance.InferencePerformanceHintSession? =
+            null
 
         try {
             val modelFile = modelManager.verifiedFile(modelId)
@@ -104,6 +134,32 @@ class StreamingAiCoordinator(
                 "A rota atual usa ${initialAudio.inputSampleRateHz} Hz, mas o modelo exige ${capabilities.requiredSampleRateHz} Hz."
             }
 
+            val preflightHealth = deviceHealthMonitor.health.value
+            val preflightDecision =
+                performancePolicy.decide(preflightHealth)
+
+            if (
+                preflightDecision.level ==
+                    AiPerformanceLevel.DSP_ONLY
+            ) {
+                fallbackToDsp(preflightDecision.reason)
+                shouldPreserveTerminalState = true
+                return
+            }
+
+            val frameDurationNanos =
+                capabilities.recommendedFrameSamples.toDouble() /
+                    capabilities.requiredSampleRateHz.toDouble() *
+                    1_000_000_000.0
+
+            hintSession = performanceHintFactory.open(
+                targetWorkDurationNanos =
+                    frameDurationNanos.toLong().coerceAtLeast(1L)
+            )
+            hintSession.setPreferPowerEfficiency(
+                preflightDecision.preferPowerEfficiency
+            )
+
             transport.clear()
             audioEngine.setProcessingMode(RealtimeProcessingMode.AI)
 
@@ -112,25 +168,21 @@ class StreamingAiCoordinator(
             )
             val adaptiveScratch = FloatArray(frame.size)
 
-            val frameDurationNanos =
-                capabilities.recommendedFrameSamples.toDouble() /
-                    capabilities.requiredSampleRateHz.toDouble() *
-                    1_000_000_000.0
-
             var chunks = 0L
             var enhancedSamples = 0L
             var totalInferenceNanos = 0L
             var maxInferenceNanos = 0L
             var realtimeFactorEma = 0.0
             var lastPublishNanos = 0L
+            var lastPowerEfficiencyPreference =
+                preflightDecision.preferPowerEfficiency
+            var currentDecision = preflightDecision
 
-            _telemetry.value = NeuralRuntimeTelemetry(
-                state = NeuralPipelineState.RUNNING,
+            _telemetry.value = telemetrySnapshot(
                 modelId = modelId,
-                engineId = capabilities.engineId,
-                provider = capabilities.provider,
-                requiredSampleRateHz = capabilities.requiredSampleRateHz,
-                frameSamples = capabilities.recommendedFrameSamples
+                capabilities = capabilities,
+                decision = preflightDecision,
+                hintSupported = hintSession.supported
             )
 
             while (currentCoroutineContext().isActive) {
@@ -143,6 +195,29 @@ class StreamingAiCoordinator(
                         capabilities.requiredSampleRateHz
                 ) {
                     "A taxa de amostragem da rota mudou durante a sessão."
+                }
+
+                val health = deviceHealthMonitor.health.value
+                currentDecision = performancePolicy.decide(health)
+
+                if (
+                    currentDecision.level ==
+                        AiPerformanceLevel.DSP_ONLY
+                ) {
+                    fallbackToDsp(currentDecision.reason)
+                    shouldPreserveTerminalState = true
+                    return
+                }
+
+                if (
+                    currentDecision.preferPowerEfficiency !=
+                        lastPowerEfficiencyPreference
+                ) {
+                    hintSession.setPreferPowerEfficiency(
+                        currentDecision.preferPowerEfficiency
+                    )
+                    lastPowerEfficiencyPreference =
+                        currentDecision.preferPowerEfficiency
                 }
 
                 val read = transport.readInput(
@@ -169,6 +244,10 @@ class StreamingAiCoordinator(
                     .getOrThrow()
                 val inferenceNanos =
                     clock.nowNanos() - startNanos
+
+                hintSession.reportActualWorkDuration(
+                    inferenceNanos.coerceAtLeast(1L)
+                )
 
                 check(
                     output.sampleRateHz ==
@@ -226,41 +305,37 @@ class StreamingAiCoordinator(
                 }
 
                 val now = clock.nowNanos()
-                if (now - lastPublishNanos >= 200_000_000L) {
-                    _telemetry.value = NeuralRuntimeTelemetry(
-                        state = NeuralPipelineState.RUNNING,
+                val publishIntervalNanos =
+                    telemetryIntervalNanos(currentDecision.level)
+
+                if (
+                    now - lastPublishNanos >=
+                        publishIntervalNanos
+                ) {
+                    _telemetry.value = telemetrySnapshot(
                         modelId = modelId,
-                        engineId = capabilities.engineId,
-                        provider = capabilities.provider,
-                        requiredSampleRateHz =
-                            capabilities.requiredSampleRateHz,
-                        frameSamples =
-                            capabilities.recommendedFrameSamples,
-                        inferenceMs =
-                            inferenceNanos / 1_000_000.0,
-                        maxInferenceMs =
-                            maxInferenceNanos / 1_000_000.0,
-                        averageInferenceMs =
-                            totalInferenceNanos.toDouble() /
-                                chunks.toDouble() /
-                                1_000_000.0,
+                        capabilities = capabilities,
+                        decision = currentDecision,
+                        hintSupported = hintSession.supported,
+                        inferenceNanos = inferenceNanos,
+                        maxInferenceNanos = maxInferenceNanos,
+                        averageInferenceNanos =
+                            if (chunks > 0L) {
+                                totalInferenceNanos.toDouble() /
+                                    chunks.toDouble()
+                            } else {
+                                null
+                            },
                         realtimeFactor = realtimeFactorEma,
                         chunksProcessed = chunks,
                         samplesEnhanced = enhancedSamples,
-                        enhancedRms = rms(finalSamples),
-                        enhancedPeak = peak(finalSamples),
-                        enhancedWaveform = waveform(
-                            finalSamples,
-                            points = 72
-                        ),
+                        finalSamples = finalSamples,
                         adaptiveControlEnabled = controlEnabled,
                         adaptiveBlendApplied = blend.applied,
-                        adaptiveStrength =
-                            blend.requestedStrength,
+                        adaptiveStrength = blend.requestedStrength,
                         adaptiveEnvironment =
                             profile.environment.displayName,
-                        adaptiveProfileRevision =
-                            profile.revision,
+                        adaptiveProfileRevision = profile.revision,
                         adaptiveBypassReason =
                             blend.reason?.takeUnless {
                                 it == "disabled"
@@ -277,6 +352,7 @@ class StreamingAiCoordinator(
             )
             shouldPreserveTerminalState = true
         } finally {
+            hintSession?.close()
             enhancer.release()
             transport.clear()
 
@@ -303,10 +379,109 @@ class StreamingAiCoordinator(
         }
     }
 
+    private fun telemetrySnapshot(
+        modelId: String,
+        capabilities: NeuralEnhancerCapabilities,
+        decision: AiPerformanceDecision,
+        hintSupported: Boolean,
+        inferenceNanos: Long? = null,
+        maxInferenceNanos: Long? = null,
+        averageInferenceNanos: Double? = null,
+        realtimeFactor: Double? = null,
+        chunksProcessed: Long = 0L,
+        samplesEnhanced: Long = 0L,
+        finalSamples: FloatArray = FloatArray(0),
+        adaptiveControlEnabled: Boolean = false,
+        adaptiveBlendApplied: Boolean = false,
+        adaptiveStrength: Float? = null,
+        adaptiveEnvironment: String? = null,
+        adaptiveProfileRevision: Long? = null,
+        adaptiveBypassReason: String? = null
+    ): NeuralRuntimeTelemetry {
+        val health = deviceHealthMonitor.health.value
+
+        return NeuralRuntimeTelemetry(
+            state = NeuralPipelineState.RUNNING,
+            modelId = modelId,
+            engineId = capabilities.engineId,
+            provider = capabilities.provider,
+            requiredSampleRateHz =
+                capabilities.requiredSampleRateHz,
+            frameSamples =
+                capabilities.recommendedFrameSamples,
+            inferenceMs =
+                inferenceNanos?.div(1_000_000.0),
+            maxInferenceMs =
+                maxInferenceNanos?.div(1_000_000.0),
+            averageInferenceMs =
+                averageInferenceNanos?.div(1_000_000.0),
+            realtimeFactor = realtimeFactor,
+            chunksProcessed = chunksProcessed,
+            samplesEnhanced = samplesEnhanced,
+            enhancedRms = rms(finalSamples),
+            enhancedPeak = peak(finalSamples),
+            enhancedWaveform = waveform(
+                finalSamples,
+                points = 72
+            ),
+            adaptiveControlEnabled =
+                adaptiveControlEnabled,
+            adaptiveBlendApplied =
+                adaptiveBlendApplied,
+            adaptiveStrength = adaptiveStrength,
+            adaptiveEnvironment = adaptiveEnvironment,
+            adaptiveProfileRevision =
+                adaptiveProfileRevision,
+            adaptiveBypassReason =
+                adaptiveBypassReason,
+            performanceLevel = decision.level,
+            performanceReason = decision.reason,
+            performanceHintSupported = hintSupported,
+            preferPowerEfficiency =
+                decision.preferPowerEfficiency,
+            thermalSeverity = health.thermalSeverity,
+            thermalHeadroomNow =
+                health.thermalHeadroomNow,
+            thermalHeadroomForecast10s =
+                health.thermalHeadroomForecast10s,
+            cpuHeadroomPercent =
+                health.cpuHeadroomPercent,
+            batteryPercent = health.batteryPercent,
+            charging = health.charging,
+            powerSaveMode = health.powerSaveMode,
+            lowMemory = health.lowMemory
+        )
+    }
+
+    private fun telemetryIntervalNanos(
+        level: AiPerformanceLevel
+    ): Long = when (level) {
+        AiPerformanceLevel.MAX -> 200_000_000L
+        AiPerformanceLevel.BALANCED -> 350_000_000L
+        AiPerformanceLevel.ECO -> 500_000_000L
+        AiPerformanceLevel.DSP_ONLY -> 1_000_000_000L
+    }
+
     private fun fallbackToDsp(reason: String) {
         audioEngine.setProcessingMode(RealtimeProcessingMode.DSP)
+
+        val health = deviceHealthMonitor.health.value
+        val decision = performancePolicy.decide(health)
+
         _telemetry.value = _telemetry.value.copy(
             state = NeuralPipelineState.FALLBACK,
+            performanceLevel = decision.level,
+            performanceReason = decision.reason,
+            thermalSeverity = health.thermalSeverity,
+            thermalHeadroomNow = health.thermalHeadroomNow,
+            thermalHeadroomForecast10s =
+                health.thermalHeadroomForecast10s,
+            cpuHeadroomPercent =
+                health.cpuHeadroomPercent,
+            batteryPercent = health.batteryPercent,
+            charging = health.charging,
+            powerSaveMode = health.powerSaveMode,
+            lowMemory = health.lowMemory,
             fallbackReason = reason,
             errorMessage = reason
         )
@@ -340,11 +515,20 @@ class StreamingAiCoordinator(
         val result = ArrayList<Float>(points)
         var start = 0
 
-        while (start < samples.size && result.size < points) {
-            val end = minOf(samples.size, start + bucket)
+        while (
+            start < samples.size &&
+            result.size < points
+        ) {
+            val end = minOf(
+                samples.size,
+                start + bucket
+            )
             var value = 0f
             for (index in start until end) {
-                value = maxOf(value, abs(samples[index]))
+                value = maxOf(
+                    value,
+                    abs(samples[index])
+                )
             }
             result += value.coerceIn(0f, 1f)
             start = end
