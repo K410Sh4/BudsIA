@@ -8,7 +8,7 @@ data class AdaptiveBlendResult(
 )
 
 /**
- * Deterministic dry/wet controller.
+ * Deterministic allocation-free dry/wet controller for the realtime AI worker.
  *
  * This is intentionally not model training. The factory neural output remains
  * unchanged; the adaptive profile only controls how much verified enhanced
@@ -16,9 +16,10 @@ data class AdaptiveBlendResult(
  */
 class AdaptiveBlendProcessor {
 
-    fun blend(
+    fun blendInto(
         dry: FloatArray,
         wet: FloatArray,
+        destination: FloatArray,
         requestedStrength: Float,
         enabled: Boolean
     ): AdaptiveBlendResult {
@@ -45,7 +46,10 @@ class AdaptiveBlendProcessor {
             )
         }
 
-        if (dry.size != wet.size) {
+        if (
+            dry.size != wet.size ||
+            destination.size < wet.size
+        ) {
             return AdaptiveBlendResult(
                 samples = wet,
                 applied = false,
@@ -63,17 +67,16 @@ class AdaptiveBlendProcessor {
         }
 
         val dryGain = 1f - strength
-        val mixed = FloatArray(wet.size)
 
         for (index in wet.indices) {
-            mixed[index] = (
+            destination[index] = (
                 dry[index] * dryGain +
                     wet[index] * strength
                 ).coerceIn(-1f, 1f)
         }
 
         return AdaptiveBlendResult(
-            samples = mixed,
+            samples = destination,
             applied = true,
             requestedStrength = strength
         )
