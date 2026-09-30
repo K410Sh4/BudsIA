@@ -4,75 +4,122 @@
 
 BudsIA V3 is an auditable, local-first adaptive audio-focus system.
 
-The architecture separates capture, routing, deterministic DSP, neural enhancement,
-adaptation, output, diagnostics, model lifecycle and UI.
+The architecture separates capture, routing, realtime transport, deterministic DSP, neural
+enhancement, adaptation, persistence, diagnostics, model lifecycle and UI.
 
 ## Foundation rule
 
 One module = one responsibility = one observable contract.
 
-No component is allowed to silently own Bluetooth, capture, neural inference, storage and UI
-at the same time.
+A change to the neural model must not require rewriting route management, Room storage or the
+Compose screen. A change to the UI must not touch the Oboe callback.
 
 ## Production live path
 
 ```
-Android route
-  -> Oboe/AAudio native input callback
-  -> lock-free SPSC input ring
-  -> native processing worker
-  -> RAW or DSP processor
-  -> lock-free SPSC output ring
-  -> optional native output callback
+Android audio route
+  -> Oboe/AAudio input callback
+  -> lock-free SPSC native ring
+  -> native realtime worker
+  -> dedicated AI SPSC transport
+  -> non-realtime neural worker
+  -> verified streaming denoiser
+  -> AdaptiveAudioMixer
+  -> native output ring
+  -> optional private output callback
 ```
 
-Kotlin is not in the per-audio-frame path.
+The model never executes inside an Oboe callback.
 
-It performs:
+## Managed control plane
 
-- lifecycle/control;
-- route description;
-- Compose state;
-- telemetry polling;
-- user-visible errors.
+Kotlin handles:
 
-## Reference path
-
-The original Kotlin `AudioCaptureEngine -> AudioFocusPipeline` remains available as a
-deterministic reference/test path.
-
-It is not the production realtime route.
+- lifecycle and user controls;
+- route descriptions;
+- verified model installation;
+- neural worker orchestration;
+- adaptive profile state;
+- Room persistence;
+- low-frequency telemetry;
+- Compose state and diagnostics.
 
 ## Surgical replacement points
 
 Native:
-- input/output stream builder;
-- ring buffer;
-- realtime processor;
-- future neural processor.
+- stream builder;
+- lock-free rings;
+- RAW/DSP processor;
+- AI transport boundary.
 
-Kotlin:
-- `RealtimeAudioEngine`: control/telemetry contract;
-- `AudioRouteMonitor`: Android device catalog;
-- `AudioFocusViewModel`: screen state only;
-- Compose UI.
+Neural:
+- `StreamingNeuralEnhancer`;
+- `StreamingAiCoordinator`;
+- model catalog/runtime.
 
-Future ONNX inference will implement the processor boundary without changing UI or route code.
+Adaptation:
+- `AdaptiveTuningEngine`;
+- `AdaptiveAudioMixer`;
+- `AdaptiveProfileRepository`;
+- `AdaptiveProfileController`.
+
+Storage:
+- Room entities/DAOs;
+- repository mapping and transactions.
+
+UI:
+- `AudioFocusViewModel`;
+- Compose live screen.
+
+## Safe learning architecture
+
+```
+Factory model (immutable)
+        ↓
+Neural output
+        ↓
+AdaptiveAudioMixer
+        ↑
+Active environment profile
+        ↑
+Explicit local feedback
+        ↓
+Room transaction
+  ├─ profile update
+  └─ feedback audit event
+```
+
+A user correction updates a bounded profile parameter. It does not mutate factory weights.
+
+Every persisted feedback event records:
+- profile;
+- model ID;
+- feedback type;
+- previous mix;
+- resulting mix;
+- timestamp.
+
+This supports later evaluation and rollback analysis.
 
 ## Failure policy
 
 Safe degradation:
 
+```
 AI -> DSP -> RAW
+```
 
-For the current phase:
-- output failure disables monitor but keeps input analysis alive;
+- output failure disables monitoring but preserves input analysis;
 - input failure moves the engine to ERROR;
-- STOP remains user-accessible;
-- no background capture service exists.
+- slow sustained neural inference falls back to DSP;
+- model integrity failure prevents AI activation;
+- profile persistence failure does not corrupt the factory model;
+- STOP remains user-accessible.
 
 ## Privacy
 
-Raw PCM remains in memory.
-Leaving the live screen stops the session.
-Conversation/audio content is not written to Logcat.
+Raw PCM remains in memory by default.
+Leaving the live screen stops capture.
+Raw audio is not persisted as training data.
+Conversation/audio contents are not written to production Logcat.
+Adaptive learning stores parameters and feedback metadata, not captured audio.
