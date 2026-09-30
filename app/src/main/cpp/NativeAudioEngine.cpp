@@ -76,6 +76,14 @@ int NativeAudioEngine::start(
         return 0;
     }
 
+    // A stream error may stop the worker from a callback while leaving the
+    // std::thread joinable. Clean that state before creating a new worker.
+    if (processingThread_.joinable()) {
+        workerRunning_.store(false, std::memory_order_release);
+        processingThread_.join();
+    }
+    closeStreams();
+
     state_.store(EngineState::Starting, std::memory_order_release);
     resetRuntimeState();
     processingMode_.store(static_cast<int>(mode), std::memory_order_release);
@@ -239,14 +247,14 @@ int NativeAudioEngine::setMonitoring(bool enabled) {
 }
 
 void NativeAudioEngine::setProcessingMode(ProcessingMode mode) {
+    // The realtime worker owns processor state. Control threads only publish
+    // the requested mode, avoiding a data race on HighPassProcessor.
     processingMode_.store(static_cast<int>(mode), std::memory_order_release);
-    if (mode == ProcessingMode::Raw) {
-        highPassProcessor_.reset();
-    }
 }
 
 std::array<std::int64_t, NativeAudioEngine::kStatCount>
 NativeAudioEngine::snapshotStats() const {
+    std::lock_guard<std::mutex> lifecycleLock(lifecycleMutex_);
     std::array<std::int64_t, kStatCount> stats{};
 
     std::int64_t inputXruns = -1;
@@ -341,6 +349,8 @@ oboe::Result NativeAudioEngine::openInputStream(int requestedDeviceId) {
                 ->setSharingMode(sharing)
                 ->setFormat(oboe::AudioFormat::Float)
                 ->setChannelCount(1)
+                ->setFormatConversionAllowed(true)
+                ->setChannelConversionAllowed(true)
                 ->setInputPreset(preset)
                 ->setDataCallback(inputCallback_)
                 ->setErrorCallback(errorCallback_);
@@ -379,6 +389,8 @@ oboe::Result NativeAudioEngine::openOutputStream(int requestedDeviceId) {
             ->setSharingMode(sharing)
             ->setFormat(oboe::AudioFormat::Float)
             ->setChannelCount(1)
+            ->setFormatConversionAllowed(true)
+            ->setChannelConversionAllowed(true)
             ->setDataCallback(outputCallback_)
             ->setErrorCallback(errorCallback_);
 
@@ -457,6 +469,9 @@ void NativeAudioEngine::resetRuntimeState() noexcept {
 void NativeAudioEngine::processingLoop() {
     std::vector<float> raw(processingBlockSamples_);
     std::vector<float> processed(processingBlockSamples_);
+    auto previousMode = static_cast<ProcessingMode>(
+        processingMode_.load(std::memory_order_acquire)
+    );
 
     while (workerRunning_.load(std::memory_order_acquire)) {
         if (inputRing_.availableToRead() < processingBlockSamples_) {
@@ -473,6 +488,13 @@ void NativeAudioEngine::processingLoop() {
         const auto mode = static_cast<ProcessingMode>(
             processingMode_.load(std::memory_order_acquire)
         );
+
+        if (mode != previousMode) {
+            if (mode == ProcessingMode::Dsp) {
+                highPassProcessor_.reset();
+            }
+            previousMode = mode;
+        }
 
         if (mode == ProcessingMode::Dsp) {
             highPassProcessor_.process(
@@ -629,7 +651,7 @@ void NativeAudioEngine::onStreamError(
             oboe::convertToText(error);
     }
 
-    if (stream == outputStream_.get()) {
+    if (stream != nullptr && stream->getDirection() == oboe::Direction::Output) {
         monitorEnabled_.store(false, std::memory_order_release);
         outputAvailable_.store(false, std::memory_order_release);
         return;
