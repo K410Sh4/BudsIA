@@ -9,3 +9,6 @@ captures/
 .externalNativeBuild/
 .cxx/
 app/libs/*.aar
+
+.vendor-cache/
+app/src/main/jniLibs/**/*.so
