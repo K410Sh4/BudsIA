@@ -1,5 +1,7 @@
 package com.k410sh4.budsia.core.ai.enhancement
 
+import com.k410sh4.budsia.core.ai.adaptation.AdaptiveBlendProcessor
+import com.k410sh4.budsia.core.ai.adaptation.AdaptiveProfileRepository
 import com.k410sh4.budsia.core.ai.models.ModelManager
 import com.k410sh4.budsia.core.audio.realtime.RealtimeAiTransport
 import com.k410sh4.budsia.core.audio.realtime.RealtimeAudioEngine
@@ -40,6 +42,12 @@ data class NeuralRuntimeTelemetry(
     val enhancedRms: Float? = null,
     val enhancedPeak: Float? = null,
     val enhancedWaveform: List<Float> = emptyList(),
+    val adaptiveControlEnabled: Boolean = false,
+    val adaptiveBlendApplied: Boolean = false,
+    val adaptiveStrength: Float? = null,
+    val adaptiveEnvironment: String? = null,
+    val adaptiveProfileRevision: Long? = null,
+    val adaptiveBypassReason: String? = null,
     val fallbackReason: String? = null,
     val errorMessage: String? = null
 )
@@ -49,14 +57,17 @@ data class NeuralRuntimeTelemetry(
  *
  * Oboe callbacks never invoke this class. The native input callback copies PCM
  * into a dedicated SPSC ring; this coordinator consumes complete model frames,
- * runs inference, and submits enhanced PCM to the native output ring.
+ * runs inference, optionally applies the explicit local adaptive dry/wet
+ * control, and submits the resulting PCM to the native output ring.
  */
 class StreamingAiCoordinator(
     private val modelManager: ModelManager,
     private val enhancer: StreamingNeuralEnhancer,
     private val audioEngine: RealtimeAudioEngine,
     private val transport: RealtimeAiTransport,
-    private val clock: MonotonicClock
+    private val clock: MonotonicClock,
+    private val adaptiveProfiles: AdaptiveProfileRepository,
+    private val adaptiveBlendProcessor: AdaptiveBlendProcessor
 ) {
     private val _telemetry = MutableStateFlow(NeuralRuntimeTelemetry())
     val telemetry: StateFlow<NeuralRuntimeTelemetry> = _telemetry.asStateFlow()
@@ -71,7 +82,9 @@ class StreamingAiCoordinator(
 
         try {
             val modelFile = modelManager.verifiedFile(modelId)
-                ?: error("O modelo de IA não está instalado ou falhou na verificação.")
+                ?: error(
+                    "O modelo de IA não está instalado ou falhou na verificação."
+                )
 
             val capabilities = enhancer
                 .prepare(
@@ -97,6 +110,8 @@ class StreamingAiCoordinator(
             val frame = FloatArray(
                 capabilities.recommendedFrameSamples
             )
+            val adaptiveScratch = FloatArray(frame.size)
+
             val frameDurationNanos =
                 capabilities.recommendedFrameSamples.toDouble() /
                     capabilities.requiredSampleRateHz.toDouble() *
@@ -148,7 +163,8 @@ class StreamingAiCoordinator(
                 val output = enhancer
                     .process(
                         samples = frame,
-                        sampleRateHz = capabilities.requiredSampleRateHz
+                        sampleRateHz =
+                            capabilities.requiredSampleRateHz
                     )
                     .getOrThrow()
                 val inferenceNanos =
@@ -161,12 +177,25 @@ class StreamingAiCoordinator(
                     "O runtime neural alterou a taxa de amostragem inesperadamente."
                 }
 
-                if (output.samples.isNotEmpty()) {
+                val profile = adaptiveProfiles.activeProfile.value
+                val controlEnabled =
+                    adaptiveProfiles.runtimeControlEnabled.value
+                val blend = adaptiveBlendProcessor.blendInto(
+                    dry = frame,
+                    wet = output.samples,
+                    destination = adaptiveScratch,
+                    requestedStrength =
+                        profile.preferredEnhancementStrength,
+                    enabled = controlEnabled
+                )
+                val finalSamples = blend.samples
+
+                if (finalSamples.isNotEmpty()) {
                     transport.writeOutput(
-                        source = output.samples,
-                        requestedCount = output.samples.size
+                        source = finalSamples,
+                        requestedCount = finalSamples.size
                     )
-                    enhancedSamples += output.samples.size
+                    enhancedSamples += finalSamples.size
                 }
 
                 chunks++
@@ -183,9 +212,6 @@ class StreamingAiCoordinator(
                         (0.10 * currentRtf)
                 }
 
-                // A sustained RTF above 1 means the worker is slower than the
-                // incoming stream. Fail safely before the input ring grows into
-                // audible multi-second latency.
                 if (
                     chunks >= 100L &&
                     realtimeFactorEma > 1.10
@@ -221,12 +247,24 @@ class StreamingAiCoordinator(
                         realtimeFactor = realtimeFactorEma,
                         chunksProcessed = chunks,
                         samplesEnhanced = enhancedSamples,
-                        enhancedRms = rms(output.samples),
-                        enhancedPeak = peak(output.samples),
+                        enhancedRms = rms(finalSamples),
+                        enhancedPeak = peak(finalSamples),
                         enhancedWaveform = waveform(
-                            output.samples,
+                            finalSamples,
                             points = 72
-                        )
+                        ),
+                        adaptiveControlEnabled = controlEnabled,
+                        adaptiveBlendApplied = blend.applied,
+                        adaptiveStrength =
+                            blend.requestedStrength,
+                        adaptiveEnvironment =
+                            profile.environment.displayName,
+                        adaptiveProfileRevision =
+                            profile.revision,
+                        adaptiveBypassReason =
+                            blend.reason?.takeUnless {
+                                it == "disabled"
+                            }
                     )
                     lastPublishNanos = now
                 }
