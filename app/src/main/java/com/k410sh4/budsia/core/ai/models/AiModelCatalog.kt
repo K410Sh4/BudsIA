@@ -33,10 +33,37 @@ object AiModelCatalog {
         qualityTier = QualityTier.MAX_QUALITY
     )
 
+    val GTCRN_16K = AiModelDescriptor(
+        id = "gtcrn-simple-16k",
+        displayName = "GTCRN Simple 16 kHz",
+        family = "GTCRN",
+        version = "speech-enhancement-models-2025-03",
+        fileName = "gtcrn_simple.onnx",
+        downloadUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/speech-enhancement-models/gtcrn_simple.onnx",
+        sha256 = "e77603ac0c23dac3227dd2d7135b3a585cbee2679048aecfa886657d3ae1b534",
+        sizeBytes = 535_638L,
+        sampleRateHz = 16_000,
+        qualityTier = QualityTier.ECO
+    )
+
     val all: List<AiModelDescriptor> = listOf(
-        DPDFNET2_48K_HR
+        DPDFNET2_48K_HR,
+        GTCRN_16K
     )
 
     fun byId(id: String): AiModelDescriptor? =
         all.firstOrNull { it.id == id }
+
+    fun bestForSampleRate(sampleRateHz: Int): AiModelDescriptor? =
+        all
+            .asSequence()
+            .filter { it.sampleRateHz == sampleRateHz }
+            .maxByOrNull { it.qualityTier.priority }
+
+    private val QualityTier.priority: Int
+        get() = when (this) {
+            QualityTier.ECO -> 1
+            QualityTier.BALANCED -> 2
+            QualityTier.MAX_QUALITY -> 3
+        }
 }
