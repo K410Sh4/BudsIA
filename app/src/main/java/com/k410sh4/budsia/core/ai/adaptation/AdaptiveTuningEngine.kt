@@ -25,20 +25,20 @@ class AdaptiveTuningEngine {
 
         val requestedMix = when (feedback) {
             AudioFeedback.MORE_FILTER ->
-                current.enhancementMix + step
+                current.preferredEnhancementStrength + step
 
             AudioFeedback.MORE_NATURAL ->
-                current.enhancementMix - step
+                current.preferredEnhancementStrength - step
 
             AudioFeedback.GOOD_AS_IS ->
-                current.enhancementMix
+                current.preferredEnhancementStrength
         }
 
         return current.copy(
             revision = current.revision + 1L,
-            enhancementMix = requestedMix.coerceIn(
-                AdaptiveAudioProfile.MIN_ENHANCEMENT_MIX,
-                AdaptiveAudioProfile.MAX_ENHANCEMENT_MIX
+            preferredEnhancementStrength = requestedMix.coerceIn(
+                AdaptiveAudioProfile.MIN_PREFERRED_STRENGTH,
+                AdaptiveAudioProfile.MAX_PREFERRED_STRENGTH
             ),
             feedbackCount = nextFeedbackCount,
             positiveFeedbackCount =
