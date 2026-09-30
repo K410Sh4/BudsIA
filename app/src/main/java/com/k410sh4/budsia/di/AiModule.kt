@@ -1,6 +1,7 @@
 package com.k410sh4.budsia.di
 
 import android.content.Context
+import com.k410sh4.budsia.core.ai.adaptation.AdaptiveNeuralMixer
 import com.k410sh4.budsia.core.ai.enhancement.SherpaStreamingNeuralEnhancer
 import com.k410sh4.budsia.core.ai.enhancement.StreamingAiCoordinator
 import com.k410sh4.budsia.core.ai.enhancement.StreamingNeuralEnhancer
@@ -36,17 +37,24 @@ object AiModule {
 
     @Provides
     @Singleton
+    fun provideAdaptiveNeuralMixer(): AdaptiveNeuralMixer =
+        AdaptiveNeuralMixer()
+
+    @Provides
+    @Singleton
     fun provideStreamingAiCoordinator(
         modelManager: ModelManager,
         enhancer: StreamingNeuralEnhancer,
         audioEngine: RealtimeAudioEngine,
         transport: RealtimeAiTransport,
-        clock: MonotonicClock
+        clock: MonotonicClock,
+        adaptiveMixer: AdaptiveNeuralMixer
     ): StreamingAiCoordinator = StreamingAiCoordinator(
         modelManager = modelManager,
         enhancer = enhancer,
         audioEngine = audioEngine,
         transport = transport,
-        clock = clock
+        clock = clock,
+        adaptiveMixer = adaptiveMixer
     )
 }
