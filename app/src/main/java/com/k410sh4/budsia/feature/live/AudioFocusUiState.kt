@@ -19,7 +19,8 @@ data class AudioFocusUiState(
     val inputRouteLabel: String = "—",
     val outputRouteLabel: String = "—",
     val canMonitorOutput: Boolean = false,
-    val modelStatus: ModelInstallStatus? = null,
+    val modelStatuses: List<ModelInstallStatus> = emptyList(),
+    val activeModelId: String? = null,
     val neuralTelemetry: NeuralRuntimeTelemetry = NeuralRuntimeTelemetry(),
     val errorMessage: String? = null
 )
