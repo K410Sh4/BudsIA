@@ -4,75 +4,136 @@
 
 BudsIA V3 is an auditable, local-first adaptive audio-focus system.
 
-The architecture separates capture, routing, deterministic DSP, neural enhancement,
-adaptation, output, diagnostics, model lifecycle and UI.
+Capture, routing, realtime transport, deterministic DSP, neural enhancement, adaptation,
+persistence, diagnostics, model lifecycle and UI are independent boundaries.
 
-## Foundation rule
+## Core rule
 
-One module = one responsibility = one observable contract.
+One responsibility = one observable contract.
 
-No component is allowed to silently own Bluetooth, capture, neural inference, storage and UI
-at the same time.
+A neural model change must not require rewriting Bluetooth routing or Compose. A UI change
+must not alter the Oboe callback. A profile-storage change must not own audio capture.
 
-## Production live path
+## Production signal path
 
 ```
-Android route
-  -> Oboe/AAudio native input callback
-  -> lock-free SPSC input ring
-  -> native processing worker
-  -> RAW or DSP processor
-  -> lock-free SPSC output ring
-  -> optional native output callback
+AudioRouteController
+        ↓
+selected Android input
+        ↓
+Oboe/AAudio input callback
+        ↓
+lock-free SPSC input ring
+        ↓
+native realtime worker
+        ├──────────────> RAW / DSP
+        └─> AI SPSC transport
+                 ↓
+      StreamingNeuralEnhancer
+                 ↓
+         AdaptiveAudioMixer
+                 ↓
+       native output ring
+                 ↓
+ optional private output callback
 ```
 
-Kotlin is not in the per-audio-frame path.
+The Oboe data callback performs bounded realtime-safe work only. Model inference, Room access,
+networking and Compose never execute in the callback.
 
-It performs:
+## Control plane
 
-- lifecycle/control;
-- route description;
-- Compose state;
-- telemetry polling;
-- user-visible errors.
-
-## Reference path
-
-The original Kotlin `AudioCaptureEngine -> AudioFocusPipeline` remains available as a
-deterministic reference/test path.
-
-It is not the production realtime route.
+Kotlin owns:
+- session lifecycle;
+- explicit route selection;
+- Android communication-route preparation/release;
+- model installation/integrity;
+- neural orchestration;
+- adaptive profiles;
+- Room transactions;
+- telemetry aggregation;
+- UI state.
 
 ## Surgical replacement points
 
-Native:
-- input/output stream builder;
-- ring buffer;
-- realtime processor;
-- future neural processor.
+### Routing
+- `AudioRouteMonitor`
+- `AudioRouteController`
 
-Kotlin:
-- `RealtimeAudioEngine`: control/telemetry contract;
-- `AudioRouteMonitor`: Android device catalog;
-- `AudioFocusViewModel`: screen state only;
-- Compose UI.
+### Native realtime
+- stream builder
+- SPSC rings
+- realtime DSP
+- AI transport boundary
+- `RealtimeAudioEngine`
 
-Future ONNX inference will implement the processor boundary without changing UI or route code.
+### Neural
+- `StreamingNeuralEnhancer`
+- `StreamingAiCoordinator`
+- model catalog/manager
+
+### Adaptation
+- `AdaptiveTuningEngine`
+- `AdaptiveAudioMixer`
+- `AdaptiveProfileController`
+- `AdaptiveProfileRepository`
+
+### Persistence
+- Room entities
+- DAOs
+- repository transactions
+
+### Presentation
+- `AudioFocusViewModel`
+- Compose live screen
+
+## Learning architecture
+
+```
+immutable factory model
+        ↓
+enhanced frame ─────────┐
+                        ├─> AdaptiveAudioMixer
+original frame ─────────┘          ↑
+                              active profile
+                                   ↑
+                         explicit user feedback
+                                   ↓
+                          Room transaction
+                       ┌───────────┴───────────┐
+                  profile update        audit event
+```
+
+The first learning layer changes only bounded profile parameters. Factory weights are never
+modified in place.
+
+Each feedback audit event stores profile ID, model ID, feedback type, previous/new mix and
+timestamp.
+
+## Route ownership
+
+BudsIA does not infer that a paired headset is active. It requests a route through supported
+Android APIs and then treats the native stream's opened device ID as truth.
+
+Communication-route ownership is released when the session ends. Bluetooth microphone use
+does not assume simultaneous A2DP behavior.
 
 ## Failure policy
 
-Safe degradation:
-
+```
 AI -> DSP -> RAW
+```
 
-For the current phase:
-- output failure disables monitor but keeps input analysis alive;
-- input failure moves the engine to ERROR;
-- STOP remains user-accessible;
-- no background capture service exists.
+- model integrity failure prevents AI activation;
+- sustained slow inference falls back to DSP;
+- output-route failure disables monitoring while preserving input analysis where possible;
+- input-route failure moves the session to ERROR;
+- storage failure cannot mutate the immutable factory model;
+- STOP remains accessible.
 
 ## Privacy
 
-Raw PCM remains in memory.
-Leaving the live screen stops the session.
-Conversation/audio content is not written to Logcat.
+Raw PCM stays in memory by default.
+No captured audio is stored as adaptation data.
+Leaving the live screen stops capture.
+Production logs do not contain conversation/audio payloads.
