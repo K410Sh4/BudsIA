@@ -9,7 +9,8 @@ internal object RealtimeAudioStatsDecoder {
     fun decode(
         stats: LongArray,
         metrics: FloatArray,
-        waveform: FloatArray
+        waveform: FloatArray,
+        spectrum: FloatArray
     ): RealtimeAudioSnapshot {
         require(stats.size >= STAT_COUNT) {
             "Native stats schema mismatch: expected >= $STAT_COUNT, got ${stats.size}."
@@ -65,7 +66,8 @@ internal object RealtimeAudioStatsDecoder {
                 dcOffset = metrics[6],
                 clippingRatio = metrics[7]
             ),
-            waveform = waveform.map { it.coerceIn(0f, 1f) }
+            waveform = waveform.map { it.coerceIn(0f, 1f) },
+            spectrum = spectrum.map { it.coerceIn(0f, 1f) }
         )
     }
 
