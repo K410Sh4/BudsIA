@@ -41,28 +41,32 @@ class SherpaStreamingNeuralEnhancer(
             )
         )
 
-        val sampleRate = created.sampleRate
-        val frameShift = created.frameShiftInSamples
+        try {
+            val sampleRate = created.sampleRate
+            val frameShift = created.frameShiftInSamples
 
-        check(sampleRate > 0) {
-            "Neural runtime returned an invalid sample rate."
+            check(sampleRate > 0) {
+                "Neural runtime returned an invalid sample rate."
+            }
+            check(frameShift > 0) {
+                "Neural runtime returned an invalid frame shift."
+            }
+
+            NeuralEnhancerCapabilities(
+                engineId = "sherpa-onnx-1.13.8-online-denoiser",
+                modelId = modelId,
+                requiredSampleRateHz = sampleRate,
+                recommendedFrameSamples = frameShift,
+                provider = provider,
+                inferenceThreads = inferenceThreads
+            ).also {
+                denoiser = created
+                capabilities = it
+            }
+        } catch (error: Throwable) {
+            created.release()
+            throw error
         }
-        check(frameShift > 0) {
-            "Neural runtime returned an invalid frame shift."
-        }
-
-        val result = NeuralEnhancerCapabilities(
-            engineId = "sherpa-onnx-1.13.8-online-denoiser",
-            modelId = modelId,
-            requiredSampleRateHz = sampleRate,
-            recommendedFrameSamples = frameShift,
-            provider = provider,
-            inferenceThreads = inferenceThreads
-        )
-
-        denoiser = created
-        capabilities = result
-        result
     }
 
     @Synchronized
