@@ -16,6 +16,7 @@ class AndroidAudioRouteController(
         context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
     private var ownsCommunicationMode = false
+    private var previousAudioMode: Int? = null
 
     @Synchronized
     override fun prepare(
@@ -90,6 +91,7 @@ class AndroidAudioRouteController(
                     message = "O dispositivo Bluetooth não está disponível como rota de comunicação."
                 )
 
+        previousAudioMode = audioManager.mode
         audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
         ownsCommunicationMode = true
 
@@ -126,9 +128,13 @@ class AndroidAudioRouteController(
             }
         }
 
+        val restoreMode = previousAudioMode
+            ?: AudioManager.MODE_NORMAL
+
         runCatching {
-            audioManager.mode = AudioManager.MODE_NORMAL
+            audioManager.mode = restoreMode
         }
+        previousAudioMode = null
         ownsCommunicationMode = false
     }
 
