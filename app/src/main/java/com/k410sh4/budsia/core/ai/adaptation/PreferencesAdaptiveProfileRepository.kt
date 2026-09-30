@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
@@ -41,6 +42,10 @@ class PreferencesAdaptiveProfileRepository(
     override val activeProfile: StateFlow<AdaptiveAudioProfile> =
         _activeProfile.asStateFlow()
 
+    private val _runtimeControlEnabled = MutableStateFlow(false)
+    override val runtimeControlEnabled: StateFlow<Boolean> =
+        _runtimeControlEnabled.asStateFlow()
+
     init {
         applicationScope.launch {
             store.data
@@ -57,6 +62,8 @@ class PreferencesAdaptiveProfileRepository(
                         preferences = preferences,
                         environment = environment
                     )
+                    _runtimeControlEnabled.value =
+                        preferences[RUNTIME_CONTROL_ENABLED] ?: false
                 }
         }
     }
@@ -105,6 +112,15 @@ class PreferencesAdaptiveProfileRepository(
 
         _activeProfile.value = updated
         return updated
+    }
+
+    override suspend fun setRuntimeControlEnabled(
+        enabled: Boolean
+    ) {
+        store.edit { preferences ->
+            preferences[RUNTIME_CONTROL_ENABLED] = enabled
+        }
+        _runtimeControlEnabled.value = enabled
     }
 
     override suspend fun resetActiveProfile(): AdaptiveAudioProfile {
@@ -221,5 +237,8 @@ class PreferencesAdaptiveProfileRepository(
 
         private val ACTIVE_ENVIRONMENT =
             stringPreferencesKey("active_environment")
+
+        private val RUNTIME_CONTROL_ENABLED =
+            booleanPreferencesKey("runtime_control_enabled")
     }
 }
