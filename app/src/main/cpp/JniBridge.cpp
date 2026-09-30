@@ -203,6 +203,34 @@ Java_com_k410sh4_budsia_core_audio_nativecore_NativeAudioBridge_nativeGetWavefor
 }
 
 extern "C"
+JNIEXPORT jfloatArray JNICALL
+Java_com_k410sh4_budsia_core_audio_nativecore_NativeAudioBridge_nativeGetSpectrum(
+    JNIEnv* env,
+    jobject,
+    jlong handle
+) {
+    auto* engine = fromHandle(handle);
+    std::array<float, NativeAudioEngine::kSpectrumPoints> spectrum{};
+
+    if (engine != nullptr) {
+        spectrum = engine->snapshotSpectrum();
+    }
+
+    jfloatArray result = env->NewFloatArray(
+        static_cast<jsize>(spectrum.size())
+    );
+    if (result == nullptr) return nullptr;
+
+    env->SetFloatArrayRegion(
+        result,
+        0,
+        static_cast<jsize>(spectrum.size()),
+        spectrum.data()
+    );
+    return result;
+}
+
+extern "C"
 JNIEXPORT jstring JNICALL
 Java_com_k410sh4_budsia_core_audio_nativecore_NativeAudioBridge_nativeGetLastError(
     JNIEnv* env,
