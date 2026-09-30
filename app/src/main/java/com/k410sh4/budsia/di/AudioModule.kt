@@ -10,6 +10,7 @@ import com.k410sh4.budsia.core.audio.enhancement.AudioEnhancementEngine
 import com.k410sh4.budsia.core.audio.enhancement.BypassAudioEnhancementEngine
 import com.k410sh4.budsia.core.audio.pipeline.AudioFocusPipeline
 import com.k410sh4.budsia.core.audio.realtime.NativeRealtimeAudioEngine
+import com.k410sh4.budsia.core.audio.realtime.RealtimeAiTransport
 import com.k410sh4.budsia.core.audio.realtime.RealtimeAudioEngine
 import com.k410sh4.budsia.core.audio.routing.AndroidAudioRouteMonitor
 import com.k410sh4.budsia.core.audio.routing.AudioRouteMonitor
@@ -68,11 +69,22 @@ object AudioModule {
         clock = clock
     )
 
-    // Production realtime path: callbacks and DSP stay native; Kotlin only controls and observes.
+    // One native engine instance backs both control/telemetry and the bounded
+    // neural-worker PCM transport. This avoids duplicate microphone streams.
     @Provides
     @Singleton
-    fun provideRealtimeAudioEngine(): RealtimeAudioEngine =
+    fun provideNativeRealtimeAudioEngine(): NativeRealtimeAudioEngine =
         NativeRealtimeAudioEngine()
+
+    @Provides
+    fun provideRealtimeAudioEngine(
+        engine: NativeRealtimeAudioEngine
+    ): RealtimeAudioEngine = engine
+
+    @Provides
+    fun provideRealtimeAiTransport(
+        engine: NativeRealtimeAudioEngine
+    ): RealtimeAiTransport = engine
 
     @Provides
     @Singleton
