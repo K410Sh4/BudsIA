@@ -3,9 +3,11 @@ package com.k410sh4.budsia.core.performance
 import android.app.ActivityManager
 import android.content.Context
 import android.os.BatteryManager
+import android.os.Build
 import android.os.PowerManager
 import android.os.Process
 import android.os.SystemClock
+import android.os.health.SystemHealthManager
 import com.k410sh4.budsia.di.ApplicationScope
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
@@ -28,6 +30,13 @@ class AndroidAiPerformanceMonitor @Inject constructor(
     private val activityManager =
         context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
 
+    private val systemHealthManager: SystemHealthManager? =
+        if (Build.VERSION.SDK_INT >= 36) {
+            context.getSystemService(SystemHealthManager::class.java)
+        } else {
+            null
+        }
+
     private val _snapshot = MutableStateFlow(DevicePerformanceSnapshot())
     override val snapshot: StateFlow<DevicePerformanceSnapshot> =
         _snapshot.asStateFlow()
@@ -48,7 +57,7 @@ class AndroidAiPerformanceMonitor @Inject constructor(
         val nowMs = SystemClock.elapsedRealtime()
         val cpuMs = Process.getElapsedCpuTime()
 
-        val cpuMetric = estimateProcessCpuPercent(
+        val processCpuMetric = estimateProcessCpuPercent(
             nowMs = nowMs,
             cpuMs = cpuMs
         )
@@ -68,16 +77,21 @@ class AndroidAiPerformanceMonitor @Inject constructor(
             thermalLevel = mapThermalLevel(
                 powerManager.currentThermalStatus
             ),
-            batteryPercent = MetricValue(
-                value = batteryPercent,
-                kind = if (batteryPercent != null) {
-                    MeasurementKind.MEASURED
-                } else {
-                    MeasurementKind.UNKNOWN
-                }
+            thermalHeadroomNow =
+                thermalHeadroom(forecastSeconds = 0),
+            thermalHeadroomForecast10s =
+                thermalHeadroom(forecastSeconds = 10),
+            cpuHeadroomPercent = cpuHeadroom(),
+            batteryPercent = metric(
+                batteryPercent,
+                MeasurementKind.MEASURED
             ),
             isCharging = MetricValue(
                 value = batteryManager.isCharging,
+                kind = MeasurementKind.MEASURED
+            ),
+            powerSaveMode = MetricValue(
+                value = powerManager.isPowerSaveMode,
                 kind = MeasurementKind.MEASURED
             ),
             availableMemoryBytes = MetricValue(
@@ -92,9 +106,69 @@ class AndroidAiPerformanceMonitor @Inject constructor(
                 value = memoryInfo.lowMemory,
                 kind = MeasurementKind.MEASURED
             ),
-            processCpuPercent = cpuMetric,
+            processCpuPercent = processCpuMetric,
             sampledAtElapsedRealtimeMs = nowMs
         )
+    }
+
+    private fun thermalHeadroom(
+        forecastSeconds: Int
+    ): MetricValue<Float> {
+        val value = runCatching {
+            powerManager
+                .getThermalHeadroom(forecastSeconds)
+                .takeIf {
+                    it.isFinite() && it >= 0f
+                }
+        }.getOrNull()
+
+        return if (value != null) {
+            MetricValue(
+                value = value,
+                kind = MeasurementKind.ESTIMATED
+            )
+        } else {
+            MetricValue(
+                value = null,
+                kind = MeasurementKind.UNKNOWN
+            )
+        }
+    }
+
+    private fun cpuHeadroom(): MetricValue<Float> {
+        if (Build.VERSION.SDK_INT < 36) {
+            return MetricValue(
+                value = null,
+                kind = MeasurementKind.UNKNOWN
+            )
+        }
+
+        val manager = systemHealthManager
+            ?: return MetricValue(
+                value = null,
+                kind = MeasurementKind.UNKNOWN
+            )
+
+        val value = runCatching {
+            manager.getCpuHeadroom(null)
+                .takeIf {
+                    it.isFinite() && it in 0f..100f
+                }
+        }.getOrNull()
+
+        return if (value != null) {
+            MetricValue(
+                value = value,
+                // Android defines this API as an estimate of available
+                // CPU capacity headroom, not a direct utilization counter.
+                kind = MeasurementKind.ESTIMATED
+            )
+        } else {
+            MetricValue(
+                value = null,
+                kind = MeasurementKind.UNKNOWN
+            )
+        }
     }
 
     private fun estimateProcessCpuPercent(
@@ -133,6 +207,22 @@ class AndroidAiPerformanceMonitor @Inject constructor(
         )
     }
 
+    private fun <T> metric(
+        value: T?,
+        kindWhenPresent: MeasurementKind
+    ): MetricValue<T> =
+        if (value != null) {
+            MetricValue(
+                value = value,
+                kind = kindWhenPresent
+            )
+        } else {
+            MetricValue(
+                value = null,
+                kind = MeasurementKind.UNKNOWN
+            )
+        }
+
     private fun mapThermalLevel(
         status: Int
     ): ThermalLevel = when (status) {
@@ -147,6 +237,9 @@ class AndroidAiPerformanceMonitor @Inject constructor(
     }
 
     companion object {
+        // Thermal headroom should not be aggressively polled. Two seconds
+        // keeps this outside latency-critical audio work and above Android's
+        // documented no-benefit sub-second polling range.
         private const val SAMPLE_INTERVAL_MS = 2_000L
     }
 }
