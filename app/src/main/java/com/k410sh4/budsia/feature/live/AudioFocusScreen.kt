@@ -113,7 +113,9 @@ private fun AudioFocusScreen(
         state.pipelineState == PipelineState.STOPPING
     val stopping = state.pipelineState == PipelineState.STOPPING
     val modelInstalled =
-        state.modelStatus?.state == ModelInstallState.INSTALLED
+        state.modelStatuses.any {
+            it.state == ModelInstallState.INSTALLED
+        }
     val aiRunning =
         state.neuralTelemetry.state == NeuralPipelineState.RUNNING
 
@@ -298,7 +300,13 @@ private fun AiModelCard(
     onInstallModel: () -> Unit,
     onRemoveModel: () -> Unit
 ) {
-    val status = state.modelStatus
+    val statuses = state.modelStatuses
+    val allInstalled = statuses.isNotEmpty() &&
+        statuses.all { it.state == ModelInstallState.INSTALLED }
+    val busy = statuses.any {
+        it.state == ModelInstallState.DOWNLOADING ||
+            it.state == ModelInstallState.VERIFYING
+    }
 
     Card(
         colors = CardDefaults.cardColors(
@@ -312,85 +320,123 @@ private fun AiModelCard(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Text(
-                text = "MODELO NEURAL",
+                text = "PACOTE NEURAL ADAPTATIVO",
                 style = MaterialTheme.typography.labelLarge
             )
 
-            MetricRow(
-                "Modelo",
-                status?.descriptor?.displayName ?: "DPDFNet2 48 kHz HR"
-            )
-            MetricRow(
-                "Perfil",
-                status?.descriptor?.qualityTier?.name ?: "MAX_QUALITY"
-            )
-            MetricRow(
-                "Estado",
-                status?.state?.name ?: "VERIFICANDO"
-            )
-            MetricRow(
-                "Tamanho",
-                status?.descriptor?.sizeBytes?.let(::formatBytes)
-                    ?: "10.1 MiB"
+            Text(
+                text = "O BudsIA escolhe o modelo pela taxa real aberta pela rota: 48 kHz para alta qualidade e 16 kHz para voz Bluetooth/HFP compatível.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp
             )
 
-            when (status?.state) {
-                ModelInstallState.DOWNLOADING,
-                ModelInstallState.VERIFYING -> {
-                    LinearProgressIndicator(
-                        progress = { status.progress },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Text(
-                        text = if (status.state == ModelInstallState.VERIFYING) {
-                            "Verificando integridade..."
-                        } else {
-                            "${(status.progress * 100).toInt()}%"
-                        },
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 12.sp
-                    )
-                }
+            statuses.forEach { status ->
+                val active =
+                    state.activeModelId == status.descriptor.id
 
-                ModelInstallState.INSTALLED -> {
-                    OutlinedButton(
-                        onClick = onRemoveModel,
-                        modifier = Modifier.fillMaxWidth()
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor =
+                            MaterialTheme.colorScheme.surfaceVariant
+                    ),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement =
+                            Arrangement.spacedBy(6.dp)
                     ) {
-                        Icon(
-                            Icons.Rounded.Delete,
-                            contentDescription = null
+                        MetricRow(
+                            "Modelo",
+                            status.descriptor.displayName
                         )
-                        androidx.compose.foundation.layout.Spacer(
-                            modifier = Modifier.size(8.dp)
+                        MetricRow(
+                            "Rota",
+                            "${status.descriptor.sampleRateHz} Hz • ${status.descriptor.qualityTier.name}"
                         )
-                        Text("Remover modelo")
-                    }
-                }
+                        MetricRow(
+                            "Estado",
+                            if (active) {
+                                "${status.state.name} • ATIVO"
+                            } else {
+                                status.state.name
+                            }
+                        )
+                        MetricRow(
+                            "Tamanho",
+                            formatBytes(
+                                status.descriptor.sizeBytes
+                            )
+                        )
 
-                else -> {
-                    Button(
-                        onClick = onInstallModel,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(
-                            Icons.Rounded.Download,
-                            contentDescription = null
-                        )
-                        androidx.compose.foundation.layout.Spacer(
-                            modifier = Modifier.size(8.dp)
-                        )
-                        Text("Instalar IA local")
+                        if (
+                            status.state ==
+                                ModelInstallState.DOWNLOADING ||
+                            status.state ==
+                                ModelInstallState.VERIFYING
+                        ) {
+                            LinearProgressIndicator(
+                                progress = { status.progress },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+
+                        status.errorMessage?.let {
+                            Text(
+                                text = it,
+                                color = MaterialTheme.colorScheme.error,
+                                fontSize = 12.sp
+                            )
+                        }
                     }
                 }
             }
 
-            status?.errorMessage?.let {
+            if (statuses.isEmpty()) {
                 Text(
-                    text = it,
-                    color = MaterialTheme.colorScheme.error,
+                    text = "Verificando modelos locais...",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 12.sp
                 )
+            }
+
+            if (!allInstalled) {
+                Button(
+                    onClick = onInstallModel,
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        Icons.Rounded.Download,
+                        contentDescription = null
+                    )
+                    androidx.compose.foundation.layout.Spacer(
+                        modifier = Modifier.size(8.dp)
+                    )
+                    Text(
+                        if (busy) {
+                            "Instalando..."
+                        } else {
+                            "Instalar pacote IA"
+                        }
+                    )
+                }
+            } else {
+                OutlinedButton(
+                    onClick = onRemoveModel,
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        Icons.Rounded.Delete,
+                        contentDescription = null
+                    )
+                    androidx.compose.foundation.layout.Spacer(
+                        modifier = Modifier.size(8.dp)
+                    )
+                    Text("Remover pacote IA")
+                }
             }
         }
     }
