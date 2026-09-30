@@ -58,6 +58,7 @@ import com.k410sh4.budsia.core.ai.models.ModelInstallState
 import com.k410sh4.budsia.core.audio.model.PipelineState
 import com.k410sh4.budsia.core.audio.realtime.RealtimeProcessingMode
 import com.k410sh4.budsia.core.audio.routing.AudioDeviceDescriptor
+import com.k410sh4.budsia.core.performance.MeasurementKind
 import java.util.Locale
 
 @Composable
@@ -203,6 +204,8 @@ private fun AudioFocusScreen(
             onGoodAsIs = onGoodAsIs,
             onResetProfile = onResetProfile
         )
+
+        PerformanceCard(state)
 
         if (
             state.neuralTelemetry.state != NeuralPipelineState.IDLE ||
@@ -606,6 +609,92 @@ private fun AdaptiveProfileCard(
 }
 
 @Composable
+private fun PerformanceCard(
+    state: AudioFocusUiState
+) {
+    val snapshot = state.performanceSnapshot
+    val decision = state.performanceDecision
+
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        shape = RoundedCornerShape(22.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "AI PERFORMANCE",
+                style = MaterialTheme.typography.labelLarge
+            )
+
+            MetricRow(
+                "Tier recomendado",
+                decision?.tier?.name ?: "ANALISANDO"
+            )
+            MetricRow(
+                "Térmico",
+                snapshot.thermalLevel.name
+            )
+            MetricRow(
+                "Bateria",
+                snapshot.batteryPercent.value?.let {
+                    "$it% • ${snapshot.batteryPercent.kind.name}"
+                } ?: "UNKNOWN"
+            )
+            MetricRow(
+                "Carregando",
+                snapshot.isCharging.value?.let {
+                    "${if (it) "SIM" else "NÃO"} • ${snapshot.isCharging.kind.name}"
+                } ?: "UNKNOWN"
+            )
+            MetricRow(
+                "Memória livre",
+                snapshot.availableMemoryBytes.value?.let {
+                    "${formatBytes(it)} • ${snapshot.availableMemoryBytes.kind.name}"
+                } ?: "UNKNOWN"
+            )
+            MetricRow(
+                "CPU do processo",
+                snapshot.processCpuPercent.value?.let {
+                    "%.1f%% • %s".format(
+                        Locale.US,
+                        it,
+                        snapshot.processCpuPercent.kind.name
+                    )
+                } ?: "UNKNOWN"
+            )
+
+            decision?.let {
+                Text(
+                    text = it.reason,
+                    color = if (it.forceFallback) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    fontSize = 12.sp
+                )
+            }
+
+            if (
+                snapshot.processCpuPercent.kind ==
+                    MeasurementKind.ESTIMATED
+            ) {
+                Text(
+                    text = "CPU é uma estimativa normalizada pelo número de processadores. Térmico, bateria e memória vêm das APIs do Android.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun NeuralDiagnosticsCard(
     state: AudioFocusUiState
 ) {
@@ -651,6 +740,10 @@ private fun NeuralDiagnosticsCard(
                 ai.realtimeFactor?.let {
                     "%.2f×".format(Locale.US, it)
                 } ?: "—"
+            )
+            MetricRow(
+                "Tier recomendado",
+                ai.recommendedPerformanceTier?.name ?: "—"
             )
             MetricRow(
                 "Frames IA",
