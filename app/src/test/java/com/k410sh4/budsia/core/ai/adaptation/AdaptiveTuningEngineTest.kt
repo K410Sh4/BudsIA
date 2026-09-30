@@ -52,6 +52,62 @@ class AdaptiveTuningEngineTest {
     }
 
     @Test
+    fun repeatedFeedbackUsesSmallerBoundedSteps() {
+        val initial = AdaptiveAudioProfile.factory(
+            AcousticEnvironment.STREET
+        )
+
+        val first = tuner.applyFeedback(
+            initial,
+            AudioFeedback.MORE_FILTER
+        )
+
+        var matured = first
+        repeat(50) {
+            matured = tuner.applyFeedback(
+                matured,
+                AudioFeedback.GOOD_AS_IS
+            )
+        }
+
+        val afterMaturedFeedback = tuner.applyFeedback(
+            matured,
+            AudioFeedback.MORE_FILTER
+        )
+
+        val firstDelta =
+            first.preferredEnhancementStrength -
+                initial.preferredEnhancementStrength
+        val laterDelta =
+            afterMaturedFeedback.preferredEnhancementStrength -
+                matured.preferredEnhancementStrength
+
+        assertTrue(laterDelta > 0f)
+        assertTrue(laterDelta < firstDelta)
+    }
+
+    @Test
+    fun resetReturnsFactoryPreferenceForSameEnvironment() {
+        val changed = tuner.applyFeedback(
+            AdaptiveAudioProfile.factory(
+                AcousticEnvironment.CAR
+            ),
+            AudioFeedback.MORE_FILTER
+        )
+
+        val reset = tuner.reset(changed.environment)
+
+        assertEquals(AcousticEnvironment.CAR, reset.environment)
+        assertEquals(
+            AdaptiveAudioProfile.DEFAULT_PREFERRED_STRENGTH,
+            reset.preferredEnhancementStrength,
+            0.0001f
+        )
+        assertEquals(0L, reset.feedbackCount)
+        assertEquals(0L, reset.revision)
+    }
+
+    @Test
     fun goodAsIsRecordsPositiveFeedbackWithoutChangingMix() {
         val initial = AdaptiveAudioProfile.factory(
             AcousticEnvironment.WORK
