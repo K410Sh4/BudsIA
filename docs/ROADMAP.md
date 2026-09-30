@@ -23,31 +23,42 @@
 - RAW vs DSP comparison
 - private-route live monitor guard
 - stop capture on screen background
-- host native ring-buffer test
+- host concurrent ring-buffer test
 
-Gate before Phase C:
-- CI green
-- physical-device capture test
-- route-change test
-- Bluetooth output test
-- verify no audible glitches under baseline DSP load
-
-## Phase C — neural enhancement
-- STFT/iSTFT or model-native spectral frontend
-- ONNX Runtime Mobile
-- causal streaming model
-- model manifest + SHA-256
-- CPU/XNNPACK baseline
-- NNAPI benchmark only when beneficial
-- AI -> DSP fallback
+## Phase C — streaming neural enhancement — IMPLEMENTED, DEVICE VALIDATION PENDING
+- sherpa-onnx 1.13.8 runtime
+- DPDFNet2 48 kHz HR model profile
+- explicit user-triggered model download
+- exact model byte-size + SHA-256 verification
+- runtime native-library SHA verification in CI
+- bounded AI PCM transport separated from Oboe callbacks
+- complete model-frame delivery
 - measured inference latency
+- moving realtime-factor telemetry
+- automatic AI -> DSP fallback when realtime cannot be sustained
+- neural output RMS / peak / waveform telemetry
+- AI mode starts from DSP and activates only after model preparation succeeds
+- no raw-audio persistence
+- debug and release builds verified by CI
 
-## Phase D — adaptive profiles
-- environment profile
-- target embeddings
-- user feedback: emphasize / keep / reduce / ignore
-- versioned local adaptation state
+### Physical-device gate before quality/performance claims
+- microphone capture on target phone
+- Galaxy Buds input/output routing
+- route-change/disconnect recovery
+- long-session thermal test
+- AI RTF under quiet / speech / noise workloads
+- output underrun test with monitoring enabled
+- subjective and objective RAW vs DSP vs AI comparison
+- confirm no audible glitches during DSP <-> AI transitions
+
+## Phase D — adaptive profiles — NEXT
 - immutable factory model
+- versioned local adaptation profile
+- environment profile
+- user feedback: emphasize / keep / reduce / ignore
+- measured profile effectiveness
+- rollback to factory behavior
+- no silent online training
 
 ## Phase E — local learning
 - explicit opt-in local dataset
@@ -55,6 +66,7 @@ Gate before Phase C:
 - offline evaluation
 - measurable promote/reject gate
 - rollback support
+- dataset delete/export controls
 
 ## Quality gate for every phase
 
