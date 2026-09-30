@@ -30,6 +30,12 @@ abstract class AdaptiveProfileDao {
     abstract fun observeActive(): Flow<AdaptiveProfileEntity?>
 
     @Query(
+        "SELECT * FROM adaptive_audio_profiles " +
+            "WHERE isActive = 1 LIMIT 1"
+    )
+    abstract suspend fun getActiveOnce(): AdaptiveProfileEntity?
+
+    @Query(
         "SELECT * FROM adaptive_audio_profiles WHERE id = :id LIMIT 1"
     )
     abstract suspend fun getById(id: String): AdaptiveProfileEntity?
