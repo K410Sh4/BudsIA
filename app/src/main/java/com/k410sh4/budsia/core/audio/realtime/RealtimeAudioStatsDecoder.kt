@@ -3,7 +3,7 @@ package com.k410sh4.budsia.core.audio.realtime
 import com.k410sh4.budsia.core.audio.model.AudioSignalMetrics
 
 internal object RealtimeAudioStatsDecoder {
-    const val STAT_COUNT = 28
+    const val STAT_COUNT = 30
     const val SIGNAL_METRIC_COUNT = 8
 
     fun decode(
@@ -42,15 +42,17 @@ internal object RealtimeAudioStatsDecoder {
             outputRingHighWatermark = stats[20],
             disconnectCount = stats[21],
             monitoringEnabled = stats[22] == 1L,
-            processingMode = if (stats[23] == 0L) {
-                RealtimeProcessingMode.RAW
-            } else {
-                RealtimeProcessingMode.DSP
+            processingMode = when (stats[23]) {
+                0L -> RealtimeProcessingMode.RAW
+                2L -> RealtimeProcessingMode.AI
+                else -> RealtimeProcessingMode.DSP
             },
             inputSharingMode = decodeSharing(stats[24]),
             outputSharingMode = decodeSharing(stats[25]),
             outputAvailable = stats[26] == 1L,
             lastErrorCode = stats[27].toInt(),
+            aiInputDroppedSamples = stats[28],
+            aiEnhancedSamples = stats[29],
             rawMetrics = AudioSignalMetrics(
                 rms = metrics[0],
                 peak = metrics[1],
