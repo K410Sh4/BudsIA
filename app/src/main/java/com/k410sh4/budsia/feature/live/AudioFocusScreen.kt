@@ -682,6 +682,7 @@ private fun PerformanceCard(
     val snapshot = state.performanceSnapshot
     val settings = state.performanceSettings
     val decision = state.performanceDecision
+    val ai = state.neuralTelemetry
 
     var batteryLimit by remember(
         settings.stopAiBelowBatteryPercent
@@ -703,7 +704,7 @@ private fun PerformanceCard(
             verticalArrangement = Arrangement.spacedBy(9.dp)
         ) {
             Text(
-                text = "AI PERFORMANCE",
+                text = "AI PERFORMANCE • ADPF",
                 style = MaterialTheme.typography.labelLarge
             )
 
@@ -712,8 +713,70 @@ private fun PerformanceCard(
                 decision?.tier?.name ?: "ANALISANDO"
             )
             MetricRow(
+                "Performance Hint",
+                when {
+                    ai.state != NeuralPipelineState.RUNNING ->
+                        "INATIVO"
+                    ai.performanceHintSupported ->
+                        "ATIVO"
+                    else ->
+                        "NÃO SUPORTADO"
+                }
+            )
+            MetricRow(
+                "Hint eficiência",
+                if (
+                    ai.state == NeuralPipelineState.RUNNING &&
+                    ai.powerEfficiencyHintActive
+                ) {
+                    "ATIVO"
+                } else {
+                    "OFF"
+                }
+            )
+            MetricRow(
                 "Térmico",
-                snapshot.thermalLevel.name
+                "${snapshot.thermalLevel.name} • MEASURED"
+            )
+            MetricRow(
+                "Headroom térmico agora",
+                snapshot.thermalHeadroomNow.value?.let {
+                    "%.2f • %s".format(
+                        Locale.US,
+                        it,
+                        snapshot.thermalHeadroomNow.kind.name
+                    )
+                } ?: "UNKNOWN"
+            )
+            MetricRow(
+                "Headroom térmico +10s",
+                snapshot.thermalHeadroomForecast10s.value?.let {
+                    "%.2f • %s".format(
+                        Locale.US,
+                        it,
+                        snapshot.thermalHeadroomForecast10s.kind.name
+                    )
+                } ?: "UNKNOWN"
+            )
+            MetricRow(
+                "CPU headroom",
+                snapshot.cpuHeadroomPercent.value?.let {
+                    "%.1f%% • %s".format(
+                        Locale.US,
+                        it,
+                        snapshot.cpuHeadroomPercent.kind.name
+                    )
+                } ?: "UNKNOWN"
+            )
+            MetricRow(
+                "CPU BudsIA",
+                snapshot.processCpuPercent.value?.let {
+                    "%.1f%% • %s".format(
+                        Locale.US,
+                        it,
+                        snapshot.processCpuPercent.kind.name
+                    )
+                } ?: "UNKNOWN"
             )
             MetricRow(
                 "Bateria",
@@ -728,19 +791,15 @@ private fun PerformanceCard(
                 } ?: "UNKNOWN"
             )
             MetricRow(
-                "Memória livre",
-                snapshot.availableMemoryBytes.value?.let {
-                    "${formatBytes(it)} • ${snapshot.availableMemoryBytes.kind.name}"
+                "Economia energia",
+                snapshot.powerSaveMode.value?.let {
+                    "${if (it) "ATIVA" else "OFF"} • ${snapshot.powerSaveMode.kind.name}"
                 } ?: "UNKNOWN"
             )
             MetricRow(
-                "CPU BudsIA",
-                snapshot.processCpuPercent.value?.let {
-                    "%.1f%% • %s".format(
-                        Locale.US,
-                        it,
-                        snapshot.processCpuPercent.kind.name
-                    )
+                "Memória livre",
+                snapshot.availableMemoryBytes.value?.let {
+                    "${formatBytes(it)} • ${snapshot.availableMemoryBytes.kind.name}"
                 } ?: "UNKNOWN"
             )
 
@@ -756,7 +815,7 @@ private fun PerformanceCard(
                     Text("Parar IA com bateria baixa")
                     Text(
                         text =
-                            "Opcional • não altera o limite térmico de segurança",
+                            "Opcional • proteção térmica e de memória continua obrigatória",
                         color =
                             MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 11.sp
@@ -814,17 +873,12 @@ private fun PerformanceCard(
                 )
             }
 
-            if (
-                snapshot.processCpuPercent.kind ==
-                    MeasurementKind.ESTIMATED
-            ) {
-                Text(
-                    text = "CPU é ESTIMATED a partir do tempo de CPU do processo e do tempo decorrido. Térmico, bateria e memória são reportados pelo Android.",
-                    color =
-                        MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 11.sp
-                )
-            }
+            Text(
+                text = "Headroom térmico e CPU headroom são estimativas do Android. CPU BudsIA é uma estimativa do processo. Nenhuma temperatura, autonomia ou ganho de NPU é inventado.",
+                color =
+                    MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 11.sp
+            )
         }
     }
 }
