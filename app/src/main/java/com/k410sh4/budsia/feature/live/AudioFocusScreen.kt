@@ -37,6 +37,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -416,6 +419,14 @@ private fun AdaptiveProfileCard(
     onResetProfile: () -> Unit
 ) {
     val profile = state.adaptiveProfile
+    var sliderValue by remember(
+        profile.environment,
+        profile.revision
+    ) {
+        mutableFloatStateOf(
+            profile.preferredEnhancementStrength
+        )
+    }
 
     Card(
         colors = CardDefaults.cardColors(
@@ -459,8 +470,11 @@ private fun AdaptiveProfileCard(
             MetricRow("Feedbacks", profile.feedbackCount.toString())
 
             Slider(
-                value = profile.preferredEnhancementStrength,
-                onValueChange = onPreferredStrengthChanged,
+                value = sliderValue,
+                onValueChange = { sliderValue = it },
+                onValueChangeFinished = {
+                    onPreferredStrengthChanged(sliderValue)
+                },
                 valueRange = 0.25f..1.0f
             )
 
