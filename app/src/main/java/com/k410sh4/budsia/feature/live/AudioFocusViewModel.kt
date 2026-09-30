@@ -18,6 +18,9 @@ import com.k410sh4.budsia.core.audio.realtime.RealtimeEngineState
 import com.k410sh4.budsia.core.audio.realtime.RealtimeProcessingMode
 import com.k410sh4.budsia.core.audio.routing.AudioRouteController
 import com.k410sh4.budsia.core.audio.routing.AudioRouteMonitor
+import com.k410sh4.budsia.core.performance.AiPerformanceMonitor
+import com.k410sh4.budsia.core.performance.PerformanceAction
+import com.k410sh4.budsia.core.performance.PerformancePolicy
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
@@ -38,7 +41,9 @@ class AudioFocusViewModel @Inject constructor(
     private val routeController: AudioRouteController,
     private val modelManager: ModelManager,
     private val aiCoordinator: StreamingAiCoordinator,
-    private val adaptiveProfiles: AdaptiveProfileRepository
+    private val adaptiveProfiles: AdaptiveProfileRepository,
+    private val performanceMonitor: AiPerformanceMonitor,
+    private val performancePolicy: PerformancePolicy
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AudioFocusUiState())
@@ -47,6 +52,7 @@ class AudioFocusViewModel @Inject constructor(
     private var sessionJob: Job? = null
     private var aiJob: Job? = null
     private var modelJob: Job? = null
+    private var thermalFallbackLatched = false
 
     init {
         viewModelScope.launch(Dispatchers.IO) {
@@ -117,6 +123,59 @@ class AudioFocusViewModel @Inject constructor(
                         _uiState.value.adaptiveControlCandidateEnabled,
                     profile = profile
                 )
+            }
+        }
+
+        viewModelScope.launch {
+            performanceMonitor.snapshot.collect { snapshot ->
+                val current = _uiState.value
+                val aiRunning =
+                    current.selectedMode == RealtimeProcessingMode.AI ||
+                        current.neuralTelemetry.state ==
+                            NeuralPipelineState.RUNNING
+
+                val decision = performancePolicy.evaluate(
+                    snapshot = snapshot,
+                    aiRunning = aiRunning
+                )
+
+                if (
+                    decision.action ==
+                        PerformanceAction.FORCE_DSP &&
+                    !thermalFallbackLatched
+                ) {
+                    thermalFallbackLatched = true
+                    aiJob?.cancel()
+                    aiJob = null
+                    realtimeAudioEngine.setProcessingMode(
+                        RealtimeProcessingMode.DSP
+                    )
+
+                    _uiState.update {
+                        it.copy(
+                            performance = snapshot,
+                            selectedMode =
+                                RealtimeProcessingMode.DSP,
+                            performanceMessage =
+                                decision.reason
+                        )
+                    }
+                } else {
+                    if (
+                        decision.action !=
+                            PerformanceAction.FORCE_DSP
+                    ) {
+                        thermalFallbackLatched = false
+                    }
+
+                    _uiState.update {
+                        it.copy(
+                            performance = snapshot,
+                            performanceMessage =
+                                decision.reason
+                        )
+                    }
+                }
             }
         }
 
