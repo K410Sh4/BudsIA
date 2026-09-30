@@ -1,5 +1,14 @@
 # Physical-device validation gate
 
+## In-app quick validation
+
+BudsIA now includes a 30-second Device Validation Lab. Start the audio pipeline first, wait
+for AI to reach RUNNING when applicable, then execute the lab.
+
+It evaluates technical stability from telemetry only. PASS does not mean acoustic quality has
+been proven. Use the longer procedure below for release validation.
+
+
 CI validates source, native compilation, runtime packaging, model integrity and unit behavior.
 It cannot prove acoustic quality, Bluetooth route behavior, thermals or end-to-end latency on
 a specific phone/headset.
