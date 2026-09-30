@@ -32,6 +32,12 @@ class AudioFocusViewModel @Inject constructor(
     private var sessionJob: Job? = null
 
     fun start() {
+        if (
+            _uiState.value.pipelineState == PipelineState.STARTING ||
+            _uiState.value.pipelineState == PipelineState.LISTENING ||
+            _uiState.value.pipelineState == PipelineState.STOPPING
+        ) return
+
         if (sessionJob?.isActive == true) return
 
         val mode = _uiState.value.selectedMode
@@ -111,18 +117,18 @@ class AudioFocusViewModel @Inject constructor(
                         canMonitorOutput = false
                     )
                 }
+                sessionJob = null
             }
         }
     }
 
     fun stop() {
-        if (sessionJob?.isActive != true) return
+        if (sessionJob == null) return
 
         _uiState.value = _uiState.value.copy(
             pipelineState = PipelineState.STOPPING
         )
         sessionJob?.cancel()
-        sessionJob = null
     }
 
     fun setProcessingMode(mode: RealtimeProcessingMode) {
