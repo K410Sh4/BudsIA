@@ -91,6 +91,17 @@
 - explicit CANDIDATE switch, OFF by default and not auto-enabled at startup
 - instant rollback to factory 100% neural behavior by disabling candidate control
 
+## Phase D.1 — local A/B preference evaluation — IMPLEMENTED
+- explicit Factory vs Candidate audition
+- both variants required before each vote
+- per-environment app-private DataStore counters
+- Factory / Candidate / No difference choices
+- minimum evidence gate before reporting directional preference
+- preference result never auto-promotes the candidate
+- no raw audio persistence
+- reset per environment
+- unit-tested evaluator thresholds
+
 ### Promotion gate for adaptive control
 - validate the implemented wet/dry mapping on physical target hardware
 - compare factory vs adaptive mapping using the same physical test material

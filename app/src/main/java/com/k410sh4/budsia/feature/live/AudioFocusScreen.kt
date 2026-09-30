@@ -54,6 +54,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.k410sh4.budsia.core.ai.adaptation.AcousticEnvironment
 import com.k410sh4.budsia.core.ai.adaptation.AdaptiveAudioProfile
 import com.k410sh4.budsia.core.ai.enhancement.NeuralPipelineState
+import com.k410sh4.budsia.core.ai.evaluation.AdaptiveAbChoice
+import com.k410sh4.budsia.core.ai.evaluation.AdaptiveAbPreferenceStatus
+import com.k410sh4.budsia.core.ai.evaluation.AdaptiveAbVariant
 import com.k410sh4.budsia.core.ai.models.ModelInstallState
 import com.k410sh4.budsia.core.audio.model.PipelineState
 import com.k410sh4.budsia.core.audio.realtime.RealtimeProcessingMode
@@ -110,7 +113,11 @@ fun AudioFocusRoute(
         onLowBatteryAutoFallbackChanged =
             viewModel::setLowBatteryAutoFallbackEnabled,
         onStopAiBelowBatteryPercentChanged =
-            viewModel::setStopAiBelowBatteryPercent
+            viewModel::setStopAiBelowBatteryPercent,
+        onAuditionFactory = viewModel::auditionAdaptiveFactory,
+        onAuditionCandidate = viewModel::auditionAdaptiveCandidate,
+        onRecordAbChoice = viewModel::recordAdaptiveAbChoice,
+        onResetAbEvaluation = viewModel::resetAdaptiveAbEvaluation
     )
 }
 
@@ -137,7 +144,11 @@ private fun AudioFocusScreen(
     onResetProfile: () -> Unit,
     onAdaptiveControlCandidateChanged: (Boolean) -> Unit,
     onLowBatteryAutoFallbackChanged: (Boolean) -> Unit,
-    onStopAiBelowBatteryPercentChanged: (Int) -> Unit
+    onStopAiBelowBatteryPercentChanged: (Int) -> Unit,
+    onAuditionFactory: () -> Unit,
+    onAuditionCandidate: () -> Unit,
+    onRecordAbChoice: (AdaptiveAbChoice) -> Unit,
+    onResetAbEvaluation: () -> Unit
 ) {
     val active = state.pipelineState == PipelineState.LISTENING ||
         state.pipelineState == PipelineState.STARTING ||
@@ -215,6 +226,14 @@ private fun AudioFocusScreen(
             onResetProfile = onResetProfile,
             onAdaptiveControlCandidateChanged =
                 onAdaptiveControlCandidateChanged
+        )
+
+        AdaptiveAbEvaluationCard(
+            state = state,
+            onAuditionFactory = onAuditionFactory,
+            onAuditionCandidate = onAuditionCandidate,
+            onRecordChoice = onRecordAbChoice,
+            onReset = onResetAbEvaluation
         )
 
         PerformanceCard(
@@ -669,6 +688,193 @@ private fun AdaptiveProfileCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 11.sp
             )
+        }
+    }
+}
+
+@Composable
+private fun AdaptiveAbEvaluationCard(
+    state: AudioFocusUiState,
+    onAuditionFactory: () -> Unit,
+    onAuditionCandidate: () -> Unit,
+    onRecordChoice: (AdaptiveAbChoice) -> Unit,
+    onReset: () -> Unit
+) {
+    val aiRunning =
+        state.neuralTelemetry.state ==
+            NeuralPipelineState.RUNNING &&
+            state.selectedMode == RealtimeProcessingMode.AI
+    val bothAuditioned =
+        state.adaptiveAbFactoryAuditioned &&
+            state.adaptiveAbCandidateAuditioned
+    val stats = state.adaptiveAbStats
+    val assessment = state.adaptiveAbAssessment
+
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        shape = RoundedCornerShape(22.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = "TESTE A/B LOCAL",
+                style = MaterialTheme.typography.labelLarge
+            )
+
+            Text(
+                text = "Compare IA Factory (100% saída neural) com seu Perfil Candidato. Nenhum áudio deste teste é salvo.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp
+            )
+
+            MetricRow(
+                "Ambiente",
+                state.adaptiveProfile.environment.displayName
+            )
+            MetricRow(
+                "Ouvindo agora",
+                when (state.adaptiveAbAuditionVariant) {
+                    AdaptiveAbVariant.FACTORY -> "IA FACTORY"
+                    AdaptiveAbVariant.CANDIDATE -> "CANDIDATO"
+                }
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = onAuditionFactory,
+                    enabled = aiRunning,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        if (state.adaptiveAbFactoryAuditioned) {
+                            "✓ Factory"
+                        } else {
+                            "Ouvir Factory"
+                        }
+                    )
+                }
+
+                OutlinedButton(
+                    onClick = onAuditionCandidate,
+                    enabled = aiRunning,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        if (state.adaptiveAbCandidateAuditioned) {
+                            "✓ Candidato"
+                        } else {
+                            "Ouvir Candidato"
+                        }
+                    )
+                }
+            }
+
+            if (!aiRunning) {
+                Text(
+                    text = "Inicie o modo IA para liberar a comparação.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.sp
+                )
+            } else if (!bothAuditioned) {
+                Text(
+                    text = "Ouça as duas variantes nesta rodada antes de votar.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.sp
+                )
+            }
+
+            Button(
+                onClick = {
+                    onRecordChoice(AdaptiveAbChoice.CANDIDATE)
+                },
+                enabled = bothAuditioned,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Prefiro Candidato")
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = {
+                        onRecordChoice(AdaptiveAbChoice.FACTORY)
+                    },
+                    enabled = bothAuditioned,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Prefiro Factory")
+                }
+
+                OutlinedButton(
+                    onClick = {
+                        onRecordChoice(
+                            AdaptiveAbChoice.NO_DIFFERENCE
+                        )
+                    },
+                    enabled = bothAuditioned,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Sem diferença")
+                }
+            }
+
+            HorizontalDivider()
+
+            MetricRow(
+                "Comparações",
+                stats.totalComparisons.toString()
+            )
+            MetricRow(
+                "Decisivas",
+                stats.decisiveComparisons.toString()
+            )
+            MetricRow(
+                "Preferência explícita candidato",
+                stats.candidatePreferenceRate?.let {
+                    "%.0f%%".format(
+                        Locale.US,
+                        it * 100f
+                    )
+                } ?: "—"
+            )
+            MetricRow(
+                "Leitura local",
+                when (assessment?.status) {
+                    AdaptiveAbPreferenceStatus.CANDIDATE_PREFERRED ->
+                        "CANDIDATO PREFERIDO"
+                    AdaptiveAbPreferenceStatus.FACTORY_PREFERRED ->
+                        "FACTORY PREFERIDO"
+                    AdaptiveAbPreferenceStatus.MIXED ->
+                        "PREFERÊNCIA MISTA"
+                    AdaptiveAbPreferenceStatus.INSUFFICIENT_DATA,
+                    null ->
+                        "DADOS INSUFICIENTES"
+                }
+            )
+
+            Text(
+                text = "Esta leitura resume suas escolhas explícitas neste ambiente; não é uma nota objetiva de qualidade e nunca promove o candidato automaticamente.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 11.sp
+            )
+
+            OutlinedButton(
+                onClick = onReset,
+                enabled = stats.totalComparisons > 0L,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Zerar avaliação deste ambiente")
+            }
         }
     }
 }
