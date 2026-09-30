@@ -1,11 +1,14 @@
 package com.k410sh4.budsia.core.ai.enhancement
 
+import com.k410sh4.budsia.core.ai.adaptation.AdaptiveAudioProfile
+import com.k410sh4.budsia.core.ai.adaptation.AdaptiveNeuralMixer
 import com.k410sh4.budsia.core.ai.models.ModelManager
 import com.k410sh4.budsia.core.audio.realtime.RealtimeAiTransport
 import com.k410sh4.budsia.core.audio.realtime.RealtimeAudioEngine
 import com.k410sh4.budsia.core.audio.realtime.RealtimeEngineState
 import com.k410sh4.budsia.core.audio.realtime.RealtimeProcessingMode
 import com.k410sh4.budsia.core.diagnostics.MonotonicClock
+import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -24,6 +27,21 @@ enum class NeuralPipelineState {
     ERROR
 }
 
+data class AdaptiveControlConfig(
+    val enabled: Boolean = false,
+    val strength: Float = 1f,
+    val profileRevision: Long = 0L,
+    val environmentLabel: String = "Factory"
+) {
+    fun sanitized(): AdaptiveControlConfig = copy(
+        strength = strength.coerceIn(
+            AdaptiveAudioProfile.MIN_PREFERRED_STRENGTH,
+            AdaptiveAudioProfile.MAX_PREFERRED_STRENGTH
+        ),
+        profileRevision = profileRevision.coerceAtLeast(0L)
+    )
+}
+
 data class NeuralRuntimeTelemetry(
     val state: NeuralPipelineState = NeuralPipelineState.IDLE,
     val modelId: String? = null,
@@ -40,6 +58,10 @@ data class NeuralRuntimeTelemetry(
     val enhancedRms: Float? = null,
     val enhancedPeak: Float? = null,
     val enhancedWaveform: List<Float> = emptyList(),
+    val adaptiveControlActive: Boolean = false,
+    val adaptiveStrength: Float = 1f,
+    val adaptiveProfileRevision: Long = 0L,
+    val adaptiveEnvironmentLabel: String = "Factory",
     val fallbackReason: String? = null,
     val errorMessage: String? = null
 )
@@ -49,22 +71,41 @@ data class NeuralRuntimeTelemetry(
  *
  * Oboe callbacks never invoke this class. The native input callback copies PCM
  * into a dedicated SPSC ring; this coordinator consumes complete model frames,
- * runs inference, and submits enhanced PCM to the native output ring.
+ * runs inference, optionally applies the explicitly enabled candidate wet/dry
+ * profile, and submits enhanced PCM to the native output ring.
  */
 class StreamingAiCoordinator(
     private val modelManager: ModelManager,
     private val enhancer: StreamingNeuralEnhancer,
     private val audioEngine: RealtimeAudioEngine,
     private val transport: RealtimeAiTransport,
-    private val clock: MonotonicClock
+    private val clock: MonotonicClock,
+    private val adaptiveMixer: AdaptiveNeuralMixer
 ) {
     private val _telemetry = MutableStateFlow(NeuralRuntimeTelemetry())
     val telemetry: StateFlow<NeuralRuntimeTelemetry> = _telemetry.asStateFlow()
 
+    private val adaptiveControl = AtomicReference(
+        AdaptiveControlConfig()
+    )
+
+    fun configureAdaptiveControl(
+        config: AdaptiveControlConfig
+    ) {
+        adaptiveControl.set(config.sanitized())
+    }
+
     suspend fun run(modelId: String) {
+        val initialAdaptive = adaptiveControl.get()
+
         _telemetry.value = NeuralRuntimeTelemetry(
             state = NeuralPipelineState.PREPARING,
-            modelId = modelId
+            modelId = modelId,
+            adaptiveControlActive = initialAdaptive.enabled,
+            adaptiveStrength = initialAdaptive.strength,
+            adaptiveProfileRevision = initialAdaptive.profileRevision,
+            adaptiveEnvironmentLabel =
+                initialAdaptive.environmentLabel
         )
 
         var shouldPreserveTerminalState = false
@@ -109,15 +150,6 @@ class StreamingAiCoordinator(
             var realtimeFactorEma = 0.0
             var lastPublishNanos = 0L
 
-            _telemetry.value = NeuralRuntimeTelemetry(
-                state = NeuralPipelineState.RUNNING,
-                modelId = modelId,
-                engineId = capabilities.engineId,
-                provider = capabilities.provider,
-                requiredSampleRateHz = capabilities.requiredSampleRateHz,
-                frameSamples = capabilities.recommendedFrameSamples
-            )
-
             while (currentCoroutineContext().isActive) {
                 val engineSnapshot = audioEngine.snapshot()
                 check(engineSnapshot.state == RealtimeEngineState.RUNNING) {
@@ -161,6 +193,18 @@ class StreamingAiCoordinator(
                     "O runtime neural alterou a taxa de amostragem inesperadamente."
                 }
 
+                val adaptive = adaptiveControl.get()
+                if (
+                    adaptive.enabled &&
+                    output.samples.isNotEmpty()
+                ) {
+                    adaptiveMixer.mixInPlace(
+                        dry = frame,
+                        wet = output.samples,
+                        strength = adaptive.strength
+                    )
+                }
+
                 if (output.samples.isNotEmpty()) {
                     transport.writeOutput(
                         source = output.samples,
@@ -183,9 +227,6 @@ class StreamingAiCoordinator(
                         (0.10 * currentRtf)
                 }
 
-                // A sustained RTF above 1 means the worker is slower than the
-                // incoming stream. Fail safely before the input ring grows into
-                // audible multi-second latency.
                 if (
                     chunks >= 100L &&
                     realtimeFactorEma > 1.10
@@ -201,6 +242,9 @@ class StreamingAiCoordinator(
 
                 val now = clock.nowNanos()
                 if (now - lastPublishNanos >= 200_000_000L) {
+                    val currentAdaptive =
+                        adaptiveControl.get()
+
                     _telemetry.value = NeuralRuntimeTelemetry(
                         state = NeuralPipelineState.RUNNING,
                         modelId = modelId,
@@ -226,7 +270,15 @@ class StreamingAiCoordinator(
                         enhancedWaveform = waveform(
                             output.samples,
                             points = 72
-                        )
+                        ),
+                        adaptiveControlActive =
+                            currentAdaptive.enabled,
+                        adaptiveStrength =
+                            currentAdaptive.strength,
+                        adaptiveProfileRevision =
+                            currentAdaptive.profileRevision,
+                        adaptiveEnvironmentLabel =
+                            currentAdaptive.environmentLabel
                     )
                     lastPublishNanos = now
                 }
@@ -252,8 +304,14 @@ class StreamingAiCoordinator(
             }
 
             if (!shouldPreserveTerminalState) {
+                val adaptive = adaptiveControl.get()
                 _telemetry.value = NeuralRuntimeTelemetry(
-                    state = NeuralPipelineState.IDLE
+                    state = NeuralPipelineState.IDLE,
+                    adaptiveControlActive = adaptive.enabled,
+                    adaptiveStrength = adaptive.strength,
+                    adaptiveProfileRevision = adaptive.profileRevision,
+                    adaptiveEnvironmentLabel =
+                        adaptive.environmentLabel
                 )
             }
         }
@@ -261,7 +319,14 @@ class StreamingAiCoordinator(
 
     fun resetTelemetry() {
         if (_telemetry.value.state != NeuralPipelineState.RUNNING) {
-            _telemetry.value = NeuralRuntimeTelemetry()
+            val adaptive = adaptiveControl.get()
+            _telemetry.value = NeuralRuntimeTelemetry(
+                adaptiveControlActive = adaptive.enabled,
+                adaptiveStrength = adaptive.strength,
+                adaptiveProfileRevision = adaptive.profileRevision,
+                adaptiveEnvironmentLabel =
+                    adaptive.environmentLabel
+            )
         }
     }
 
