@@ -74,6 +74,29 @@
 - expose active adaptive control in UI
 - one-tap rollback to factory behavior
 
+## Phase D.1 — AI performance governor — IMPLEMENTED, DEVICE VALIDATION PENDING
+- Android thermal-status monitoring
+- battery percentage and charging state
+- available/total memory and Android low-memory signal
+- process CPU percentage labeled ESTIMATED
+- deterministic ECO / BALANCED / MAX_QUALITY / DSP_ONLY decision
+- severe thermal -> automatic AI to DSP fallback
+- low-memory -> automatic AI to DSP fallback
+- battery <= 15% while not charging -> automatic AI to DSP fallback
+- device-health reason exposed in UI and neural telemetry
+- no invented temperature or battery-runtime values
+- no automatic accelerator/provider switching yet
+
+### Performance device gate
+- verify thermal state transitions on target phone
+- run 20+ minute 48 kHz neural session
+- run 20+ minute 16 kHz Bluetooth neural session
+- compare battery drain RAW vs DSP vs AI
+- confirm severe thermal fallback leaves audio/STOP responsive
+- confirm low-battery fallback at configured threshold
+- validate estimated process CPU against profiler traces
+- only then consider measured dynamic thread/provider control
+
 ## Phase E — local learning
 - explicit opt-in local dataset
 - candidate profile/model
