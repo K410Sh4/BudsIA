@@ -38,11 +38,41 @@ class DeviceValidationEvaluatorTest {
     }
 
     @Test
+    fun healthyAiSessionPassesNeuralChecks() {
+        val samples = listOf(
+            sample(
+                elapsedMs = 0,
+                inputFrames = 0,
+                processingMode = RealtimeProcessingMode.AI,
+                neuralState = NeuralPipelineState.RUNNING,
+                neuralRate = 48_000,
+                rtf = 0.55
+            ),
+            sample(
+                elapsedMs = 30_000,
+                inputFrames = 1_440_000,
+                processingMode = RealtimeProcessingMode.AI,
+                neuralState = NeuralPipelineState.RUNNING,
+                neuralRate = 48_000,
+                rtf = 0.70
+            )
+        )
+
+        val report = evaluator.evaluate(
+            requestedMode = RealtimeProcessingMode.AI,
+            samples = samples
+        )
+
+        assertEquals(ValidationStatus.PASS, report.overallStatus)
+    }
+
+    @Test
     fun aiSessionFailsWhenRealtimeFactorExceedsOne() {
         val samples = listOf(
             sample(
                 elapsedMs = 0,
                 inputFrames = 0,
+                processingMode = RealtimeProcessingMode.AI,
                 neuralState = NeuralPipelineState.RUNNING,
                 neuralRate = 48_000,
                 rtf = 0.70
@@ -50,6 +80,7 @@ class DeviceValidationEvaluatorTest {
             sample(
                 elapsedMs = 30_000,
                 inputFrames = 1_440_000,
+                processingMode = RealtimeProcessingMode.AI,
                 neuralState = NeuralPipelineState.RUNNING,
                 neuralRate = 48_000,
                 rtf = 1.05
@@ -119,6 +150,8 @@ class DeviceValidationEvaluatorTest {
         elapsedMs: Long,
         inputFrames: Long,
         outputFrames: Long = 0L,
+        processingMode: RealtimeProcessingMode =
+            RealtimeProcessingMode.DSP,
         inputDrops: Long = 0L,
         outputUnderruns: Long = 0L,
         monitoring: Boolean = false,
@@ -131,7 +164,7 @@ class DeviceValidationEvaluatorTest {
         DeviceValidationSample(
             elapsedMs = elapsedMs,
             engineState = RealtimeEngineState.RUNNING,
-            processingMode = RealtimeProcessingMode.DSP,
+            processingMode = processingMode,
             inputSampleRateHz = 48_000,
             outputSampleRateHz = 48_000,
             inputFrames = inputFrames,
