@@ -38,7 +38,8 @@ class RealtimeAudioStatsDecoderTest {
         val snapshot = RealtimeAudioStatsDecoder.decode(
             stats = stats,
             metrics = metrics,
-            waveform = floatArrayOf(-2f, 0.5f, 3f)
+            waveform = floatArrayOf(-2f, 0.5f, 3f),
+            spectrum = floatArrayOf(-1f, 0.25f, 2f)
         )
 
         assertEquals(RealtimeEngineState.RUNNING, snapshot.state)
@@ -53,6 +54,7 @@ class RealtimeAudioStatsDecoderTest {
         assertFalse(snapshot.monitoringEnabled)
         assertEquals(1.25, snapshot.lastProcessorMs, 0.0001)
         assertEquals(listOf(0f, 0.5f, 1f), snapshot.waveform)
+        assertEquals(listOf(0f, 0.25f, 1f), snapshot.spectrum)
     }
 
     @Test
@@ -69,7 +71,8 @@ class RealtimeAudioStatsDecoderTest {
             metrics = FloatArray(
                 RealtimeAudioStatsDecoder.SIGNAL_METRIC_COUNT
             ),
-            waveform = FloatArray(0)
+            waveform = FloatArray(0),
+            spectrum = FloatArray(0)
         )
 
         assertEquals(
@@ -85,7 +88,8 @@ class RealtimeAudioStatsDecoderTest {
         RealtimeAudioStatsDecoder.decode(
             stats = LongArray(2),
             metrics = FloatArray(8),
-            waveform = FloatArray(0)
+            waveform = FloatArray(0),
+            spectrum = FloatArray(0)
         )
     }
 }
