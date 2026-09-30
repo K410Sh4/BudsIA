@@ -2,90 +2,95 @@
 
 BudsIA V3 is a local-first adaptive audio filtering platform for Android.
 
-The project is intentionally built as replaceable, observable stages so capture, routing,
-deterministic DSP, neural enhancement and future adaptation can evolve independently.
+The project is built as replaceable, observable stages so capture, Bluetooth routing, DSP,
+neural inference, adaptation and persistence can be changed independently.
 
-## Current production live path
+## Current live path
 
 ```
-Microphone
+Selected Android input
+  -> route preparation (when needed)
   -> Oboe / AAudio
-  -> lock-free native rings
-  -> deterministic native worker
-  -> DSP or verified streaming neural worker
-  -> optional private-route monitor
+  -> lock-free native input ring
+  -> native realtime worker
+  -> DSP or dedicated AI transport
+  -> sherpa-onnx streaming denoiser
+  -> bounded adaptive profile mix
+  -> native output ring
+  -> private output when monitoring is enabled
 ```
 
-The audio callback remains native and bounded. Neural inference never runs inside an Oboe
-callback.
+Neural inference never executes inside an Oboe callback.
 
 ## Implemented
 
-- Android 36 / Kotlin / Compose / Hilt
+- Android 36 / Kotlin / Jetpack Compose / Hilt
 - C++20 native audio core
 - Oboe 1.10.0
-- device-native sample-rate discovery
-- exclusive-low-latency request with shared fallback
-- unprocessed-input request with voice-recognition fallback
-- SPSC lock-free input/output rings
-- dedicated native processing worker
-- RAW / DSP / AI modes
-- optional live monitor restricted to private outputs
-- selectable microphone and output routes
-- explicit Android 12+ Bluetooth communication routing via setCommunicationDevice()
-- VoiceCommunication input preset for Bluetooth headset microphones
-- actual route/device IDs surfaced to Kotlin after native stream open
-- BLUETOOTH_CONNECT runtime permission only for paired Bluetooth audio control
-- xruns when available
-- input drops / AI-input drops / output underruns / output overruns
-- measured native callback, DSP and neural inference timings
-- realtime-factor watchdog with automatic AI -> DSP fallback
-- explicit microphone-active indicator
-- automatic stop when the live screen leaves foreground
-- no raw-audio persistence
-- verified model lifecycle with exact byte-size + SHA-256 validation
-- sherpa-onnx 1.13.8 streaming denoiser runtime
-- DPDFNet2 48 kHz HR MAX_QUALITY model option
-- Kotlin unit tests + host C++ concurrent SPSC test
+- actual device/sample-rate discovery
+- exclusive low-latency request with shared fallback
+- unprocessed input with voice-communication/recognition fallback where appropriate
+- lock-free SPSC realtime and AI transport rings
+- RAW / DSP / IA modes
+- selectable input/output routes while stopped
+- Android 12+ communication-device routing for Bluetooth microphone use
+- BLUETOOTH_CONNECT only where paired Bluetooth route control requires it
+- actual opened route shown as source of truth
+- verified sherpa-onnx 1.13.8 runtime
+- DPDFNet2 48 kHz HR MAX_QUALITY model
+- explicit model download with exact size + SHA-256 verification
+- measured inference current/average/max and realtime factor
+- automatic AI -> DSP fallback when sustained realtime processing cannot keep up
+- environment profiles: Geral, Casa, Rua, Carro, Trabalho
+- local Teach AI feedback
+- bounded diminishing-step personalization
+- Room 2.8.5 relational persistence
+- atomic profile update + feedback audit event with model identity
+- no raw-audio persistence for learning
+- xrun/drop/underrun/clipping diagnostics
+- release R8/JNI integrity checks
+- unit tests + native SPSC concurrency test
 - debug/release CI
-- CI verification that required neural native libraries are packaged
 
-## Neural enhancement
+## Safe self-learning policy
 
-The current AI path is real, local and explicitly gated.
+The factory model is immutable.
 
-The app starts the audio engine in deterministic DSP while the neural model is prepared and
-verified. Only after the model runtime reports a valid frame size and matching sample rate
-does the coordinator switch the live engine to AI mode. This prevents stale microphone
-backlog from accumulating while the model loads.
+```
+factory model
+   ↓
+neural output ─────┐
+                   ├─> bounded adaptive mixer -> output
+original frame ────┘
+          ↑
+environment profile
+          ↑
+explicit local feedback
+          ↓
+atomic Room audit event
+```
 
-Current neural baseline:
+Current learning adjusts a bounded per-environment mix. It does not silently rewrite neural
+weights. Future local training must create a separate candidate and pass regression tests
+before promotion.
 
-- runtime: sherpa-onnx 1.13.8
-- model: DPDFNet2 48 kHz HR
-- provider: CPU baseline
-- model integrity: pinned size + SHA-256
-- automatic fallback: AI -> DSP
-- realtime watchdog: moving RTF > 1.10 after warmup triggers fallback
+## Bluetooth routing policy
 
-The app does **not** claim device-specific latency or quality until physical-device validation
-has been completed.
+A connected headset is never assumed to be the active microphone. The user selects an input
+and output route while audio is stopped. When a Bluetooth microphone requires communication
+routing, Android owns that communication route and BudsIA reports the route actually opened
+by the native stream.
 
-## Bluetooth routing
+Galaxy Buds microphone bandwidth, routing stability and end-to-end latency remain physical
+device validation items.
 
-A connected headset is not assumed to be the active microphone. BudsIA lets the user select
-an input and output route while audio is stopped. For Bluetooth HFP/SCO or BLE-headset input
-on Android 12+, it prepares Android's communication route, then opens Oboe using the selected
-input device and reports the device that the stream actually opened.
+## Validation boundary
 
-When a Bluetooth microphone is used, Android owns the paired communication output route rather
-than BudsIA trying to force a simultaneous A2DP output. Route behavior is still marked for
-physical Galaxy Buds validation.
+CI verifies build integrity, native concurrency, runtime/model hashes, Room schema, release
+minification contracts and APK packaging.
 
-## Next phase
-
-Adaptive profiles will add versioned local preferences and environment-specific behavior
-without modifying the immutable factory model.
+Acoustic quality, battery drain, thermal behavior and Bluetooth round-trip latency require
+measurements on the target device and are not claimed by CI.
 
 ## Documentation
 
@@ -96,3 +101,4 @@ without modifying the immutable factory model.
 - `docs/adr/0001-native-realtime-core.md`
 - `docs/adr/0002-neural-runtime.md`
 - `docs/adr/0003-explicit-bluetooth-routing.md`
+- `docs/adr/0004-adaptive-self-learning.md`
