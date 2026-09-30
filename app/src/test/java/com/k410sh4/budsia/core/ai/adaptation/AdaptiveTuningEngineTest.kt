@@ -22,8 +22,8 @@ class AdaptiveTuningEngineTest {
         }
 
         assertEquals(
-            AdaptiveAudioProfile.MAX_ENHANCEMENT_MIX,
-            profile.enhancementMix,
+            AdaptiveAudioProfile.MAX_PREFERRED_STRENGTH,
+            profile.preferredEnhancementStrength,
             0.0001f
         )
         assertEquals(200L, profile.feedbackCount)
@@ -44,11 +44,11 @@ class AdaptiveTuningEngineTest {
         }
 
         assertEquals(
-            AdaptiveAudioProfile.MIN_ENHANCEMENT_MIX,
-            profile.enhancementMix,
+            AdaptiveAudioProfile.MIN_PREFERRED_STRENGTH,
+            profile.preferredEnhancementStrength,
             0.0001f
         )
-        assertTrue(profile.enhancementMix > 0f)
+        assertTrue(profile.preferredEnhancementStrength > 0f)
     }
 
     @Test
@@ -63,8 +63,8 @@ class AdaptiveTuningEngineTest {
         )
 
         assertEquals(
-            initial.enhancementMix,
-            updated.enhancementMix,
+            initial.preferredEnhancementStrength,
+            updated.preferredEnhancementStrength,
             0.0001f
         )
         assertEquals(1L, updated.feedbackCount)
