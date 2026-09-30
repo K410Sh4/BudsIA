@@ -1,15 +1,10 @@
 package com.k410sh4.budsia.core.performance
 
-data class AiPerformancePolicy(
-    val stopAiBelowBatteryPercent: Int = 15,
-    val ecoBelowBatteryPercent: Int = 25
-)
+class AiPerformanceGovernor {
 
-class AiPerformanceGovernor(
-    private val policy: AiPerformancePolicy = AiPerformancePolicy()
-) {
     fun decide(
-        snapshot: DevicePerformanceSnapshot
+        snapshot: DevicePerformanceSnapshot,
+        settings: AiPerformanceSettings = AiPerformanceSettings()
     ): AiPerformanceDecision {
         if (snapshot.lowMemory.value == true) {
             return AiPerformanceDecision(
@@ -38,14 +33,15 @@ class AiPerformanceGovernor(
         val charging = snapshot.isCharging.value == true
 
         if (
+            settings.lowBatteryAutoFallbackEnabled &&
             battery != null &&
-            battery <= policy.stopAiBelowBatteryPercent &&
+            battery <= settings.stopAiBelowBatteryPercent &&
             !charging
         ) {
             return AiPerformanceDecision(
                 tier = AiPerformanceTier.DSP_ONLY,
                 allowAi = false,
-                reason = "Bateria em $battery%; IA pausada abaixo do limite de ${policy.stopAiBelowBatteryPercent}%.",
+                reason = "Bateria em $battery%; IA pausada abaixo do limite configurado de ${settings.stopAiBelowBatteryPercent}%.",
                 forceFallback = true
             )
         }
@@ -54,7 +50,7 @@ class AiPerformanceGovernor(
             snapshot.thermalLevel == ThermalLevel.MODERATE ||
             (
                 battery != null &&
-                    battery <= policy.ecoBelowBatteryPercent &&
+                    battery <= settings.ecoBelowBatteryPercent &&
                     !charging
                 )
         ) {
