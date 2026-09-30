@@ -217,7 +217,7 @@ class PreferencesAdaptiveProfileRepository(
 
     companion object {
         private const val STORE_NAME =
-            "adaptive_audio_profiles.preferences_pb"
+            "adaptive_audio_profiles"
 
         private val ACTIVE_ENVIRONMENT =
             stringPreferencesKey("active_environment")
