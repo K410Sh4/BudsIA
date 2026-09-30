@@ -152,6 +152,7 @@ private:
 
     mutable std::mutex lifecycleMutex_;
     mutable std::mutex signalMutex_;
+    mutable std::mutex aiSpectrumMutex_;
     mutable std::mutex errorMutex_;
 
     std::shared_ptr<InputCallback> inputCallback_;
