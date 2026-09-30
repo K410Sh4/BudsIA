@@ -50,14 +50,29 @@
 - output underrun test with monitoring enabled
 - RAW vs DSP vs AI listening comparison
 
-## Phase D — adaptive profiles — NEXT
-- immutable factory model
-- versioned local adaptation profile
-- environment profile
-- user feedback: emphasize / keep / reduce / ignore
-- measured profile effectiveness
-- rollback to factory behavior
-- no silent online training
+## Phase D — adaptive profiles — IMPLEMENTED AS CANDIDATE CONTROL, ACTIVATION PENDING
+- immutable factory model remains unchanged
+- stable DataStore 1.2.1 persistence
+- schema-versioned local profile
+- independent profiles: Geral / Casa / Rua / Trabalho / Carro
+- bounded preferred enhancement strength
+- explicit feedback: Mais filtro / Mais natural / Está bom assim
+- decaying deterministic adjustment step
+- slider commits once per interaction instead of writing continuously
+- reset per environment
+- unit-tested safety bounds
+- no raw audio persistence
+- no silent online model training
+- **not yet connected automatically to realtime enhancement**
+
+### Promotion gate for adaptive control
+- define a deterministic mapping to supported DSP/neural parameters
+- compare factory vs adaptive mapping using the same physical test material
+- no regression in speech preservation
+- no regression in AI realtime factor
+- no increase in input drops or output underruns
+- expose active adaptive control in UI
+- one-tap rollback to factory behavior
 
 ## Phase E — local learning
 - explicit opt-in local dataset
