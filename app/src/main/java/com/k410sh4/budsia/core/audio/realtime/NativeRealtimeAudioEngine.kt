@@ -2,7 +2,7 @@ package com.k410sh4.budsia.core.audio.realtime
 
 import com.k410sh4.budsia.core.audio.nativecore.NativeAudioBridge
 
-class NativeRealtimeAudioEngine(
+class NativeRealtimeAudioEngine internal constructor(
     private val bridge: NativeAudioBridge = NativeAudioBridge()
 ) : RealtimeAudioEngine {
 
