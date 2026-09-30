@@ -780,7 +780,12 @@ private fun DeviceValidationCard(
     val report = validation.report
     val canStart =
         state.pipelineState == PipelineState.LISTENING &&
-            !validation.running
+            !validation.running &&
+            (
+                state.selectedMode != RealtimeProcessingMode.AI ||
+                    state.neuralTelemetry.state ==
+                        NeuralPipelineState.RUNNING
+                )
 
     Card(
         colors = CardDefaults.cardColors(
