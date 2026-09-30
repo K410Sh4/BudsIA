@@ -102,7 +102,9 @@ fun AudioFocusRoute(
         onMoreFilter = viewModel::teachMoreFilter,
         onMoreNatural = viewModel::teachMoreNatural,
         onGoodAsIs = viewModel::teachGoodAsIs,
-        onResetProfile = viewModel::resetAdaptiveProfile
+        onResetProfile = viewModel::resetAdaptiveProfile,
+        onAdaptiveRuntimeControlChanged =
+            viewModel::setAdaptiveRuntimeControlEnabled
     )
 }
 
@@ -126,7 +128,8 @@ private fun AudioFocusScreen(
     onMoreFilter: () -> Unit,
     onMoreNatural: () -> Unit,
     onGoodAsIs: () -> Unit,
-    onResetProfile: () -> Unit
+    onResetProfile: () -> Unit,
+    onAdaptiveRuntimeControlChanged: (Boolean) -> Unit
 ) {
     val active = state.pipelineState == PipelineState.LISTENING ||
         state.pipelineState == PipelineState.STARTING ||
@@ -201,7 +204,9 @@ private fun AudioFocusScreen(
             onMoreFilter = onMoreFilter,
             onMoreNatural = onMoreNatural,
             onGoodAsIs = onGoodAsIs,
-            onResetProfile = onResetProfile
+            onResetProfile = onResetProfile,
+            onRuntimeControlChanged =
+                onAdaptiveRuntimeControlChanged
         )
 
         if (
@@ -480,7 +485,8 @@ private fun AdaptiveProfileCard(
     onMoreFilter: () -> Unit,
     onMoreNatural: () -> Unit,
     onGoodAsIs: () -> Unit,
-    onResetProfile: () -> Unit
+    onResetProfile: () -> Unit,
+    onRuntimeControlChanged: (Boolean) -> Unit
 ) {
     val profile = state.adaptiveProfile
     var sliderValue by remember(
@@ -513,6 +519,37 @@ private fun AdaptiveProfileCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp
             )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Aplicar perfil no áudio da IA")
+                    Text(
+                        text = if (state.adaptiveRuntimeControlEnabled) {
+                            "ATIVO • mistura adaptativa local em tempo real"
+                        } else {
+                            "DESATIVADO • a IA usa 100% da saída do modelo"
+                        },
+                        color = if (
+                            state.adaptiveRuntimeControlEnabled
+                        ) {
+                            Color(0xFF65F0A9)
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        fontSize = 11.sp
+                    )
+                }
+                Switch(
+                    checked =
+                        state.adaptiveRuntimeControlEnabled,
+                    onCheckedChange =
+                        onRuntimeControlChanged
+                )
+            }
 
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -597,7 +634,11 @@ private fun AdaptiveProfileCard(
             }
 
             Text(
-                text = "A preferência é persistida e versionada, mas ainda não modifica automaticamente o áudio. Ela só será promovida para controle do processamento após avaliação A/B no aparelho.",
+                text = if (state.adaptiveRuntimeControlEnabled) {
+                    "CONTROLE EXPERIMENTAL ATIVO: o valor salvo passa a controlar uma mistura dry/wet entre o áudio original e a saída neural. O modelo continua imutável e o controle pode ser desligado a qualquer momento."
+                } else {
+                    "A preferência fica salva localmente. Ative o controle experimental somente quando quiser testar a influência do perfil em tempo real."
+                },
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 11.sp
             )
@@ -670,6 +711,36 @@ private fun NeuralDiagnosticsCard(
                     "%.4f".format(Locale.US, it)
                 } ?: "—"
             )
+            MetricRow(
+                "Controle adaptativo",
+                if (ai.adaptiveControlEnabled) "ATIVO" else "OFF"
+            )
+            MetricRow(
+                "Blend aplicado",
+                if (ai.adaptiveBlendApplied) "SIM" else "NÃO"
+            )
+            MetricRow(
+                "Força adaptativa",
+                ai.adaptiveStrength?.let {
+                    "${(it * 100f).toInt()}%"
+                } ?: "—"
+            )
+            MetricRow(
+                "Ambiente",
+                ai.adaptiveEnvironment ?: "—"
+            )
+            MetricRow(
+                "Revisão perfil",
+                ai.adaptiveProfileRevision?.toString() ?: "—"
+            )
+
+            ai.adaptiveBypassReason?.let {
+                Text(
+                    text = "Perfil não aplicado: $it",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp
+                )
+            }
 
             ai.fallbackReason?.let {
                 Text(
