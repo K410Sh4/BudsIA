@@ -82,7 +82,8 @@ class NativeRealtimeAudioEngine internal constructor(
         RealtimeAudioStatsDecoder.decode(
             stats = bridge.nativeGetStats(handle),
             metrics = bridge.nativeGetSignalMetrics(handle),
-            waveform = bridge.nativeGetWaveform(handle)
+            waveform = bridge.nativeGetWaveform(handle),
+            spectrum = bridge.nativeGetSpectrum(handle)
         )
 
     override fun lastError(): String? =
