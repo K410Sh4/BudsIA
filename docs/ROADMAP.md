@@ -50,16 +50,26 @@
 - output underrun test with monitoring enabled
 - RAW vs DSP vs AI listening comparison
 
-## Phase C.2 — AI performance governor — IMPLEMENTED, DEVICE VALIDATION PENDING
+## Phase C.2 — AI performance governor + ADPF — IMPLEMENTED, DEVICE VALIDATION PENDING
 - Android thermal status monitoring
+- current thermal-headroom estimate
+- 10-second predictive thermal-headroom estimate
+- Android 16 CPU-headroom estimate when supported
 - measured battery and charging state
+- measured power-save state
 - measured available/total memory
 - Android low-memory flag
 - estimated process CPU load
+- stable single-thread neural inference dispatcher
+- Android 12+ Performance Hint session
+- actual inference duration reported after each model cycle
+- Android 15+ power-efficiency scheduling preference
 - severe thermal -> automatic AI to DSP fallback
+- near-severe thermal forecast -> preventive AI to DSP fallback
 - low-memory -> automatic AI to DSP fallback
 - optional battery threshold fallback, OFF by default
 - configurable stop threshold from 5% to 30%
+- telemetry rate reduced in BALANCED/ECO
 - transparent MEASURED / ESTIMATED / UNKNOWN labels
 - performance recommendations do not silently switch incompatible models
 
