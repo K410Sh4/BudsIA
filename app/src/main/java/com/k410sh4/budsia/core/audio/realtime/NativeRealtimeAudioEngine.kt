@@ -3,8 +3,10 @@ package com.k410sh4.budsia.core.audio.realtime
 import com.k410sh4.budsia.core.audio.nativecore.NativeAudioBridge
 
 class NativeRealtimeAudioEngine internal constructor(
-    private val bridge: NativeAudioBridge = NativeAudioBridge()
-) : RealtimeAudioEngine {
+    private val bridge: NativeAudioBridge
+) : RealtimeAudioEngine, RealtimeAiTransport {
+
+    constructor() : this(NativeAudioBridge())
 
     private val handle: Long = bridge.nativeCreate().also {
         check(it != 0L) { "Unable to allocate native audio engine." }
@@ -51,6 +53,28 @@ class NativeRealtimeAudioEngine internal constructor(
 
     override fun setProcessingMode(mode: RealtimeProcessingMode) {
         bridge.nativeSetProcessingMode(handle, mode.nativeValue)
+    }
+
+    override fun readInput(
+        destination: FloatArray,
+        requestedCount: Int
+    ): Int = bridge.nativeReadAiInput(
+        handle = handle,
+        destination = destination,
+        requestedCount = requestedCount.coerceIn(0, destination.size)
+    )
+
+    override fun writeOutput(
+        source: FloatArray,
+        requestedCount: Int
+    ): Int = bridge.nativeWriteAiOutput(
+        handle = handle,
+        source = source,
+        requestedCount = requestedCount.coerceIn(0, source.size)
+    )
+
+    override fun clear() {
+        bridge.nativeClearAiTransport(handle)
     }
 
     override fun snapshot(): RealtimeAudioSnapshot =

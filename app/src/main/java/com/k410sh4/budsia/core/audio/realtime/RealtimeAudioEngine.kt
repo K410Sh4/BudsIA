@@ -4,7 +4,8 @@ import com.k410sh4.budsia.core.audio.model.AudioSignalMetrics
 
 enum class RealtimeProcessingMode(val nativeValue: Int) {
     RAW(0),
-    DSP(1)
+    DSP(1),
+    AI(2)
 }
 
 enum class RealtimeEngineState {
@@ -63,6 +64,8 @@ data class RealtimeAudioSnapshot(
     val outputSharingMode: StreamSharingMode,
     val outputAvailable: Boolean,
     val lastErrorCode: Int,
+    val aiInputDroppedSamples: Long,
+    val aiEnhancedSamples: Long,
     val rawMetrics: AudioSignalMetrics,
     val processedMetrics: AudioSignalMetrics,
     val waveform: List<Float>
@@ -81,4 +84,15 @@ interface RealtimeAudioEngine {
     fun setProcessingMode(mode: RealtimeProcessingMode)
     fun snapshot(): RealtimeAudioSnapshot
     fun lastError(): String?
+}
+
+
+/**
+ * Low-level bounded transport between the native realtime engine and the
+ * non-realtime neural worker. Never call these methods from an Oboe callback.
+ */
+interface RealtimeAiTransport {
+    fun readInput(destination: FloatArray, requestedCount: Int): Int
+    fun writeOutput(source: FloatArray, requestedCount: Int): Int
+    fun clear()
 }

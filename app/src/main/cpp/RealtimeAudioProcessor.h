@@ -8,6 +8,7 @@ namespace budsia::audio {
 enum class ProcessingMode : int {
     Raw = 0,
     Dsp = 1,
+    Ai = 2,
 };
 
 class HighPassProcessor {

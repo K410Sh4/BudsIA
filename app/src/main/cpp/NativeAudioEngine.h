@@ -19,7 +19,7 @@ class NativeAudioEngine {
 public:
     static constexpr std::size_t kWaveformPoints = 72;
     static constexpr std::size_t kSignalMetricCount = 8;
-    static constexpr std::size_t kStatCount = 28;
+    static constexpr std::size_t kStatCount = 30;
 
     enum class EngineState : std::int64_t {
         Stopped = 0,
@@ -40,6 +40,11 @@ public:
 
     int setMonitoring(bool enabled);
     void setProcessingMode(ProcessingMode mode);
+
+    // AI transport is consumed/produced only by the non-realtime AI worker.
+    std::size_t readAiInput(float* destination, std::size_t count) noexcept;
+    std::size_t writeAiOutput(const float* source, std::size_t count) noexcept;
+    void clearAiTransport() noexcept;
 
     [[nodiscard]] std::array<std::int64_t, kStatCount> snapshotStats() const;
     [[nodiscard]] std::array<float, kSignalMetricCount> snapshotSignalMetrics() const;
@@ -145,6 +150,7 @@ private:
     std::shared_ptr<oboe::AudioStream> outputStream_;
 
     LockFreeSpscRingBuffer<float, kRingCapacity> inputRing_;
+    LockFreeSpscRingBuffer<float, kRingCapacity> aiInputRing_;
     LockFreeSpscRingBuffer<float, kRingCapacity> outputRing_;
 
     HighPassProcessor highPassProcessor_;
@@ -182,6 +188,8 @@ private:
     std::atomic<std::int64_t> inputRingHighWatermark_{0};
     std::atomic<std::int64_t> outputRingHighWatermark_{0};
     std::atomic<std::int64_t> disconnectCount_{0};
+    std::atomic<std::int64_t> aiInputDroppedSamples_{0};
+    std::atomic<std::int64_t> aiEnhancedSamples_{0};
 
     std::size_t processingBlockSamples_ = 480;
     std::string lastErrorText_;

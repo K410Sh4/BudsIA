@@ -189,6 +189,7 @@ void NativeAudioEngine::stop() {
 
     closeStreams();
     inputRing_.clear();
+    aiInputRing_.clear();
     outputRing_.clear();
     highPassProcessor_.reset();
 
@@ -252,6 +253,68 @@ void NativeAudioEngine::setProcessingMode(ProcessingMode mode) {
     processingMode_.store(static_cast<int>(mode), std::memory_order_release);
 }
 
+std::size_t NativeAudioEngine::readAiInput(
+    float* destination,
+    std::size_t count
+) noexcept {
+    if (destination == nullptr || count == 0) return 0;
+    if (static_cast<ProcessingMode>(
+            processingMode_.load(std::memory_order_acquire)
+        ) != ProcessingMode::Ai) {
+        return 0;
+    }
+
+    // The neural runtime operates on its model-recommended frame size.
+    // Never return a partial frame: that would force allocations/copies on
+    // the managed side to stitch arbitrary callback fragments together.
+    if (aiInputRing_.availableToRead() < count) {
+        return 0;
+    }
+
+    return aiInputRing_.read(destination, count);
+}
+
+std::size_t NativeAudioEngine::writeAiOutput(
+    const float* source,
+    std::size_t count
+) noexcept {
+    if (source == nullptr || count == 0) return 0;
+    if (static_cast<ProcessingMode>(
+            processingMode_.load(std::memory_order_acquire)
+        ) != ProcessingMode::Ai) {
+        return 0;
+    }
+
+    aiEnhancedSamples_.fetch_add(
+        static_cast<std::int64_t>(count),
+        std::memory_order_relaxed
+    );
+
+    // Inference still runs when monitoring is disabled so telemetry and
+    // evaluation remain valid, but audio is not queued into an unconsumed ring.
+    if (!monitorEnabled_.load(std::memory_order_acquire)) {
+        return count;
+    }
+
+    const auto written = outputRing_.write(source, count);
+    if (written < count) {
+        outputOverrunSamples_.fetch_add(
+            static_cast<std::int64_t>(count - written),
+            std::memory_order_relaxed
+        );
+    }
+    updateHighWatermark(
+        outputRingHighWatermark_,
+        outputRing_.availableToRead()
+    );
+    return written;
+}
+
+void NativeAudioEngine::clearAiTransport() noexcept {
+    aiInputRing_.clear();
+    outputRing_.clear();
+}
+
 std::array<std::int64_t, NativeAudioEngine::kStatCount>
 NativeAudioEngine::snapshotStats() const {
     std::lock_guard<std::mutex> lifecycleLock(lifecycleMutex_);
@@ -300,6 +363,8 @@ NativeAudioEngine::snapshotStats() const {
     stats[25] = outputSharingMode_.load(std::memory_order_acquire);
     stats[26] = outputAvailable_.load(std::memory_order_acquire) ? 1 : 0;
     stats[27] = lastErrorCode_.load(std::memory_order_acquire);
+    stats[28] = aiInputDroppedSamples_.load(std::memory_order_acquire);
+    stats[29] = aiEnhancedSamples_.load(std::memory_order_acquire);
     return stats;
 }
 
@@ -451,8 +516,11 @@ void NativeAudioEngine::resetRuntimeState() noexcept {
     inputRingHighWatermark_.store(0, std::memory_order_release);
     outputRingHighWatermark_.store(0, std::memory_order_release);
     disconnectCount_.store(0, std::memory_order_release);
+    aiInputDroppedSamples_.store(0, std::memory_order_release);
+    aiEnhancedSamples_.store(0, std::memory_order_release);
 
     inputRing_.clear();
+    aiInputRing_.clear();
     outputRing_.clear();
     highPassProcessor_.reset();
 
@@ -539,7 +607,10 @@ void NativeAudioEngine::processingLoop() {
             signalSnapshot_ = next;
         }
 
-        if (monitorEnabled_.load(std::memory_order_acquire)) {
+        if (
+            mode != ProcessingMode::Ai &&
+            monitorEnabled_.load(std::memory_order_acquire)
+        ) {
             const auto written = outputRing_.write(
                 processed.data(),
                 processed.size()
@@ -586,6 +657,18 @@ oboe::DataCallbackResult NativeAudioEngine::onInputAudioReady(
             static_cast<std::int64_t>(sampleCount - written),
             std::memory_order_relaxed
         );
+    }
+
+    if (static_cast<ProcessingMode>(
+            processingMode_.load(std::memory_order_acquire)
+        ) == ProcessingMode::Ai) {
+        const auto aiWritten = aiInputRing_.write(samples, sampleCount);
+        if (aiWritten < sampleCount) {
+            aiInputDroppedSamples_.fetch_add(
+                static_cast<std::int64_t>(sampleCount - aiWritten),
+                std::memory_order_relaxed
+            );
+        }
     }
 
     inputFrames_.fetch_add(numFrames, std::memory_order_relaxed);
