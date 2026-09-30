@@ -369,12 +369,19 @@ class AudioFocusViewModel @Inject constructor(
                             snapshot.outputSampleRateHz ==
                                 snapshot.inputSampleRateHz
 
+                    val communicationMonitor =
+                        preparedRoute.communicationMode &&
+                            preparedRoute.communicationDeviceId != null
+
                     val canMonitor =
                         snapshot.outputAvailable &&
                             ratesMatch &&
-                            routeMonitor.isPrivateOutput(
-                                snapshot.outputDeviceId
-                            )
+                            (
+                                communicationMonitor ||
+                                    routeMonitor.isPrivateOutput(
+                                        snapshot.outputDeviceId
+                                    )
+                                )
 
                     _uiState.update {
                         it.copy(
@@ -384,7 +391,14 @@ class AudioFocusViewModel @Inject constructor(
                                 snapshot.inputDeviceId
                             ),
                             outputRouteLabel =
-                                if (snapshot.outputAvailable) {
+                                if (
+                                    preparedRoute.communicationMode &&
+                                    preparedRoute.communicationDeviceId != null
+                                ) {
+                                    routeMonitor.outputLabel(
+                                        preparedRoute.communicationDeviceId
+                                    )
+                                } else if (snapshot.outputAvailable) {
                                     routeMonitor.outputLabel(
                                         snapshot.outputDeviceId
                                     )

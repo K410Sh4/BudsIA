@@ -106,6 +106,18 @@ class AndroidAudioRouteController(
             )
         }
 
+        if (!awaitCommunicationDevice(communicationDevice.id)) {
+            release()
+            return PreparedAudioRoute(
+                success = false,
+                inputDeviceId = inputDeviceId,
+                outputDeviceId = outputDeviceId,
+                communicationMode = true,
+                message =
+                    "O Android não confirmou a rota Bluetooth a tempo. Tente novamente com os fones conectados."
+            )
+        }
+
         return PreparedAudioRoute(
             success = true,
             inputDeviceId = inputDeviceId,
@@ -138,6 +150,32 @@ class AndroidAudioRouteController(
         ownsCommunicationMode = false
     }
 
+    private fun awaitCommunicationDevice(
+        expectedDeviceId: Int
+    ): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            return false
+        }
+
+        val deadlineNanos =
+            System.nanoTime() + COMMUNICATION_ROUTE_TIMEOUT_MS * 1_000_000L
+
+        do {
+            if (audioManager.communicationDevice?.id == expectedDeviceId) {
+                return true
+            }
+
+            try {
+                Thread.sleep(COMMUNICATION_ROUTE_POLL_MS)
+            } catch (interrupted: InterruptedException) {
+                Thread.currentThread().interrupt()
+                return false
+            }
+        } while (System.nanoTime() < deadlineNanos)
+
+        return audioManager.communicationDevice?.id == expectedDeviceId
+    }
+
     private fun hasBluetoothConnectPermission(): Boolean =
         Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
             ContextCompat.checkSelfPermission(
@@ -148,4 +186,9 @@ class AndroidAudioRouteController(
     private fun isCommunicationBluetooth(type: Int): Boolean =
         type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
             type == AudioDeviceInfo.TYPE_BLE_HEADSET
+
+    companion object {
+        private const val COMMUNICATION_ROUTE_TIMEOUT_MS = 5_000L
+        private const val COMMUNICATION_ROUTE_POLL_MS = 50L
+    }
 }

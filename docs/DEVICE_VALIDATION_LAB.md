@@ -20,6 +20,10 @@ It is specifically designed to answer questions CI cannot answer, such as:
 > Route sanity check: selecting a Bluetooth A2DP output does **not** mean the headset microphone
 > is active. Before a headset-microphone test, stop audio and explicitly select the Bluetooth
 > HFP/SCO or BLE headset input. Android then owns the paired communication route.
+> BudsIA requests a 16 kHz logical communication stream for this path so the lightweight
+> GTCRN model is selected instead of running the 48 kHz high-resolution model over HFP.
+> The live monitor uses a VoiceCommunication/Speech output stream and is enabled only after
+> Android confirms the communication device.
 
 1. Connect the intended headset if applicable.
 2. Select the desired input/output while audio is stopped.

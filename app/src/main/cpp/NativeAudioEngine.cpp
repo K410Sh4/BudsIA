@@ -14,6 +14,7 @@ constexpr int kErrorUnsupportedInputFormat = -10001;
 constexpr int kErrorOutputUnavailable = -10002;
 constexpr int kErrorSampleRateMismatch = -10003;
 constexpr int kErrorNotRunning = -10004;
+constexpr int kCommunicationSampleRateHz = 16'000;
 
 struct Metrics {
     float rms = 0.0f;
@@ -125,7 +126,11 @@ int NativeAudioEngine::start(
         std::memory_order_release
     );
 
-    const auto outputResult = openOutputStream(requestedOutputDeviceId);
+    const auto outputResult = openOutputStream(
+        requestedOutputDeviceId,
+        communicationMode,
+        inputSampleRate_.load(std::memory_order_acquire)
+    );
     if (outputResult == oboe::Result::OK && outputStream_ != nullptr) {
         outputAvailable_.store(true, std::memory_order_release);
         outputSampleRate_.store(
@@ -437,6 +442,13 @@ oboe::Result NativeAudioEngine::openInputStream(
                 ->setDataCallback(inputCallback_)
                 ->setErrorCallback(errorCallback_);
 
+            if (communicationMode) {
+                // HFP/BLE voice capture is normalized to the rate supported by
+                // BudsIA's lightweight communication model. Oboe may perform
+                // conversion when the physical transport exposes another rate.
+                builder.setSampleRate(kCommunicationSampleRateHz);
+            }
+
             if (requestedDeviceId > 0) {
                 builder.setDeviceId(requestedDeviceId);
             }
@@ -456,7 +468,11 @@ oboe::Result NativeAudioEngine::openInputStream(
     return lastResult;
 }
 
-oboe::Result NativeAudioEngine::openOutputStream(int requestedDeviceId) {
+oboe::Result NativeAudioEngine::openOutputStream(
+    int requestedDeviceId,
+    bool communicationMode,
+    int requestedSampleRate
+) {
     const std::array<oboe::SharingMode, 2> sharingModes{
         oboe::SharingMode::Exclusive,
         oboe::SharingMode::Shared,
@@ -475,6 +491,20 @@ oboe::Result NativeAudioEngine::openOutputStream(int requestedDeviceId) {
             ->setChannelConversionAllowed(true)
             ->setDataCallback(outputCallback_)
             ->setErrorCallback(errorCallback_);
+
+        if (requestedSampleRate > 0) {
+            // Keep monitor input/output on one logical rate so the native
+            // monitor can remain allocation-free without a second resampler.
+            builder.setSampleRate(requestedSampleRate);
+        }
+
+        if (communicationMode) {
+            // setCommunicationDevice() routes communication usages. Oboe's
+            // default is Media/Music, which can remain on an earpiece/A2DP
+            // route even while the Bluetooth microphone is active.
+            builder.setUsage(oboe::Usage::VoiceCommunication)
+                ->setContentType(oboe::ContentType::Speech);
+        }
 
         if (requestedDeviceId > 0) {
             builder.setDeviceId(requestedDeviceId);
