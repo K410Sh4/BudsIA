@@ -89,9 +89,9 @@ mapping must pass physical A/B validation and retain a factory rollback path bef
 
 ## AI performance governor
 
-BudsIA continuously samples Android thermal, battery and memory state. Severe thermal
-pressure, Android low-memory state, or battery at/below 15% while not charging forces a safe
-AI -> DSP fallback during a live session.
+BudsIA continuously samples Android thermal, battery and memory state. Severe thermal pressure or Android low-memory state forces a safe AI -> DSP fallback during a
+live session. Battery fallback defaults to 15% while not charging, can be adjusted from 5% to
+30%, and can be disabled explicitly without disabling thermal or memory protection.
 
 CPU percentage is shown as **ESTIMATED**, derived from process CPU time and elapsed wall time.
 Thermal, battery and memory values are reported from Android APIs.
