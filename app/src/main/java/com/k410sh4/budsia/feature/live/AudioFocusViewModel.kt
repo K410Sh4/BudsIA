@@ -18,6 +18,9 @@ import com.k410sh4.budsia.core.audio.realtime.RealtimeEngineState
 import com.k410sh4.budsia.core.audio.realtime.RealtimeProcessingMode
 import com.k410sh4.budsia.core.audio.routing.AudioRouteController
 import com.k410sh4.budsia.core.audio.routing.AudioRouteMonitor
+import com.k410sh4.budsia.core.performance.AiPerformanceGovernor
+import com.k410sh4.budsia.core.performance.AiPerformanceMonitor
+import com.k410sh4.budsia.core.performance.AiPerformanceSettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
@@ -38,7 +41,11 @@ class AudioFocusViewModel @Inject constructor(
     private val routeController: AudioRouteController,
     private val modelManager: ModelManager,
     private val aiCoordinator: StreamingAiCoordinator,
-    private val adaptiveProfiles: AdaptiveProfileRepository
+    private val adaptiveProfiles: AdaptiveProfileRepository,
+    private val performanceMonitor: AiPerformanceMonitor,
+    private val performanceGovernor: AiPerformanceGovernor,
+    private val performanceSettings:
+        AiPerformanceSettingsRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AudioFocusUiState())
@@ -108,6 +115,36 @@ class AudioFocusViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
+            performanceSettings.settings.collect { settings ->
+                performanceGovernor.updatePolicy(
+                    settings.toPolicy()
+                )
+
+                _uiState.update { current ->
+                    current.copy(
+                        performanceSettings = settings,
+                        performanceDecision =
+                            performanceGovernor.decide(
+                                current.performanceSnapshot
+                            )
+                    )
+                }
+            }
+        }
+
+        viewModelScope.launch {
+            performanceMonitor.snapshot.collect { snapshot ->
+                _uiState.update { current ->
+                    current.copy(
+                        performanceSnapshot = snapshot,
+                        performanceDecision =
+                            performanceGovernor.decide(snapshot)
+                    )
+                }
+            }
+        }
+
+        viewModelScope.launch {
             adaptiveProfiles.activeProfile.collect { profile ->
                 _uiState.update {
                     it.copy(adaptiveProfile = profile)
@@ -153,6 +190,20 @@ class AudioFocusViewModel @Inject constructor(
         ) return
 
         if (sessionJob?.isActive == true) return
+
+        if (
+            current.selectedMode == RealtimeProcessingMode.AI &&
+            current.performanceDecision?.allowAi == false
+        ) {
+            _uiState.update {
+                it.copy(
+                    selectedMode = RealtimeProcessingMode.DSP,
+                    errorMessage =
+                        current.performanceDecision.reason
+                )
+            }
+            return
+        }
 
         if (
             current.selectedMode == RealtimeProcessingMode.AI &&
@@ -386,6 +437,20 @@ class AudioFocusViewModel @Inject constructor(
     }
 
     fun setProcessingMode(mode: RealtimeProcessingMode) {
+        if (
+            mode == RealtimeProcessingMode.AI &&
+            _uiState.value.performanceDecision?.allowAi == false
+        ) {
+            _uiState.update {
+                it.copy(
+                    errorMessage =
+                        it.performanceDecision?.reason
+                            ?: "A IA está temporariamente indisponível pelas condições do aparelho."
+                )
+            }
+            return
+        }
+
         if (mode == RealtimeProcessingMode.AI) {
             val snapshot = _uiState.value.snapshot
             val compatibleInstalled = if (snapshot != null) {
@@ -547,6 +612,24 @@ class AudioFocusViewModel @Inject constructor(
             enabled = enabled,
             profile = _uiState.value.adaptiveProfile
         )
+    }
+
+    fun setLowBatteryAutoFallbackEnabled(
+        enabled: Boolean
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            performanceSettings
+                .setLowBatteryAutoFallbackEnabled(enabled)
+        }
+    }
+
+    fun setStopAiBelowBatteryPercent(
+        percent: Int
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            performanceSettings
+                .setStopAiBelowBatteryPercent(percent)
+        }
     }
 
     fun teachMoreFilter() {
