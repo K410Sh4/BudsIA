@@ -97,6 +97,29 @@
 - validate estimated process CPU against profiler traces
 - only then consider measured dynamic thread/provider control
 
+## Phase D.2 — device validation lab — IMPLEMENTED
+- 30-second in-app telemetry-only validation
+- realtime engine continuity check
+- processing-mode stability check
+- input sample-rate stability check
+- input drop-rate check
+- monitored-output underrun check
+- XRun check when available
+- thermal peak check
+- AI RUNNING/fallback check
+- neural model/sample-rate compatibility check
+- neural realtime-factor check
+- estimated process CPU peak
+- no audio persistence
+- AI test starts only after neural runtime is RUNNING
+
+### Still requires the physical phone/headset
+- run the lab on phone mic RAW / DSP / AI
+- run the lab on Galaxy Buds mic
+- compare 16 kHz vs 48 kHz routes
+- repeat under CPU load and long sessions
+- perform separate acoustic A/B listening tests
+
 ## Phase E — local learning
 - explicit opt-in local dataset
 - candidate profile/model
