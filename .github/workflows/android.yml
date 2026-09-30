@@ -45,14 +45,22 @@ jobs:
       - name: Fetch verified neural runtime
         run: bash scripts/fetch_sherpa_runtime.sh
 
-      - name: Validate pinned neural model asset
+      - name: Validate pinned neural model assets
         run: |
-          MODEL=/tmp/dpdfnet2_48khz_hr.onnx
+          DPDF=/tmp/dpdfnet2_48khz_hr.onnx
+          GTCRN=/tmp/gtcrn_simple.onnx
+
           curl --fail --location --retry 4 --retry-delay 2 \
-            --output "$MODEL" \
+            --output "$DPDF" \
             https://github.com/k2-fsa/sherpa-onnx/releases/download/speech-enhancement-models/dpdfnet2_48khz_hr.onnx
-          echo "0b399f8a58dc4d70d8cd97541f5c39869406145193b957d00a03b66070944928  $MODEL" | sha256sum --check -
-          test "$(stat --format=%s "$MODEL")" = "10596848"
+          echo "0b399f8a58dc4d70d8cd97541f5c39869406145193b957d00a03b66070944928  $DPDF" | sha256sum --check -
+          test "$(stat --format=%s "$DPDF")" = "10596848"
+
+          curl --fail --location --retry 4 --retry-delay 2 \
+            --output "$GTCRN" \
+            https://github.com/k2-fsa/sherpa-onnx/releases/download/speech-enhancement-models/gtcrn_simple.onnx
+          echo "e77603ac0c23dac3227dd2d7135b3a585cbee2679048aecfa886657d3ae1b534  $GTCRN" | sha256sum --check -
+          test "$(stat --format=%s "$GTCRN")" = "535638"
 
       - name: Unit tests
         run: gradle :app:testDebugUnitTest --stacktrace
