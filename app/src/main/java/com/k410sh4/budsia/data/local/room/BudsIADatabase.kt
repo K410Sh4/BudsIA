@@ -5,11 +5,13 @@ import androidx.room.RoomDatabase
 
 @Database(
     entities = [
-        AdaptiveProfileEntity::class
+        AdaptiveProfileEntity::class,
+        AdaptiveFeedbackEventEntity::class
     ],
     version = 1,
     exportSchema = true
 )
 abstract class BudsIADatabase : RoomDatabase() {
     abstract fun adaptiveProfileDao(): AdaptiveProfileDao
+    abstract fun adaptiveFeedbackDao(): AdaptiveFeedbackDao
 }
