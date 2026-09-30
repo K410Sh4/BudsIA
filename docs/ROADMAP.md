@@ -4,75 +4,68 @@
 - Android project
 - Hilt
 - Compose
-- reference microphone capture
-- deterministic DSP
+- deterministic reference path
 - metrics
 - privacy baseline
-- unit tests
+- tests
 - CI
 
-## Phase B — native realtime audio core — IMPLEMENTED, DEVICE VALIDATION PENDING
+## Phase B — native realtime audio core — DONE IN CODE, DEVICE VALIDATION PENDING
 - Oboe / AAudio
 - C++20
 - lock-free SPSC rings
-- native processing worker
-- exclusive -> shared fallback
-- unprocessed -> voice-recognition input fallback
-- actual route IDs and sample rates
+- native DSP worker
+- actual route IDs/sample rates
 - xrun/drop/underrun telemetry
-- RAW vs DSP comparison
-- private-route live monitor guard
-- stop capture on screen background
-- host concurrent ring-buffer test
+- RAW vs DSP
+- private-route monitor guard
+- lifecycle-safe stop
+- native concurrency test
 
-## Phase C — streaming neural enhancement — IMPLEMENTED, DEVICE VALIDATION PENDING
-- sherpa-onnx 1.13.8 runtime
-- DPDFNet2 48 kHz HR model profile
-- explicit user-triggered model download
-- exact model byte-size + SHA-256 verification
-- runtime native-library SHA verification in CI
-- bounded AI PCM transport separated from Oboe callbacks
-- complete model-frame delivery
-- measured inference latency
-- moving realtime-factor telemetry
-- automatic AI -> DSP fallback when realtime cannot be sustained
-- neural output RMS / peak / waveform telemetry
-- AI mode starts from DSP and activates only after model preparation succeeds
-- no raw-audio persistence
-- debug and release builds verified by CI
+## Phase C — streaming neural enhancement — DONE IN CODE, DEVICE VALIDATION PENDING
+- verified sherpa-onnx runtime packaging
+- verified DPDFNet2 48 kHz HR model lifecycle
+- explicit model integrity gate
+- isolated non-realtime inference worker
+- native AI input/output transport
+- RAW / DSP / AI switching
+- measured inference timing
+- moving realtime factor
+- automatic AI -> DSP fallback
+- neural output waveform/levels
+- unit tests for critical fallback gates
 
-### Physical-device gate before quality/performance claims
-- microphone capture on target phone
-- Galaxy Buds input/output routing
-- route-change/disconnect recovery
-- long-session thermal test
-- AI RTF under quiet / speech / noise workloads
-- output underrun test with monitoring enabled
-- subjective and objective RAW vs DSP vs AI comparison
-- confirm no audible glitches during DSP <-> AI transitions
+Physical-device validation remains mandatory before performance or acoustic-quality claims.
 
 ## Phase D — adaptive profiles — NEXT
-- immutable factory model
-- versioned local adaptation profile
-- environment profile
+- environment profiles
+- target/preference parameters
 - user feedback: emphasize / keep / reduce / ignore
-- measured profile effectiveness
-- rollback to factory behavior
-- no silent online training
+- versioned local adaptation state
+- DataStore persistence
+- immutable factory model
+- rollback-safe profile revisions
 
-## Phase E — local learning
-- explicit opt-in local dataset
+## Phase E — model evaluation and personalization
+- local evaluation corpus
+- A/B metrics
 - candidate profile/model
-- offline evaluation
-- measurable promote/reject gate
-- rollback support
-- dataset delete/export controls
+- promote/reject gate
+- rollback
+- no uncontrolled online weight mutation
+
+## Phase F — advanced target focus
+- acoustic embeddings
+- user-selected target sound
+- source-aware enhancement experiments
+- optional semantic sound classes
+- performance-tier selection
 
 ## Quality gate for every phase
 
 1. unit/native tests
 2. debug build
-3. release compile
+3. release build
 4. no sensitive logging
 5. documented failure behavior
 6. no invented telemetry
