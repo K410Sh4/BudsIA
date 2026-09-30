@@ -233,17 +233,15 @@ private fun AudioFocusScreen(
 
                 HumanQuickSummaryCard(
                     listening = layered.listening,
-                    selectedMode = state.selectedMode
+                    selectedMode = state.selectedMode,
+                    monitoringEnabled =
+                        state.snapshot?.monitoringEnabled == true,
+                    onMonitoringChanged = onMonitoringChanged,
+                    selectedEnvironment =
+                        state.adaptiveProfile.environment,
+                    onEnvironmentSelected =
+                        onEnvironmentSelected
                 )
-
-                state.errorMessage?.let {
-                    HumanAlertCard(
-                        category = "Sistema",
-                        title = "Atenção",
-                        detail = it,
-                        severity = UiNoticeSeverity.ERROR
-                    )
-                }
 
                 if (!hasMicrophonePermission) {
                     Button(
@@ -530,7 +528,11 @@ private fun HumanStatusCard(
 @Composable
 private fun HumanQuickSummaryCard(
     listening: ListeningUiState,
-    selectedMode: RealtimeProcessingMode
+    selectedMode: RealtimeProcessingMode,
+    monitoringEnabled: Boolean,
+    onMonitoringChanged: (Boolean) -> Unit,
+    selectedEnvironment: AcousticEnvironment,
+    onEnvironmentSelected: (AcousticEnvironment) -> Unit
 ) {
     Card(
         colors = CardDefaults.cardColors(
@@ -572,6 +574,62 @@ private fun HumanQuickSummaryCard(
                 "Ambiente",
                 listening.environmentLabel
             )
+
+            HorizontalDivider()
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement =
+                    Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Ouvir áudio processado",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text =
+                            if (listening.monitoringAvailable) {
+                                "Rota compatível detectada"
+                            } else {
+                                "Indisponível nesta rota"
+                            },
+                        color =
+                            MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                Switch(
+                    checked = monitoringEnabled,
+                    onCheckedChange = onMonitoringChanged,
+                    enabled =
+                        listening.monitoringAvailable ||
+                            monitoringEnabled
+                )
+            }
+
+            Text(
+                text = "Ambiente",
+                style = MaterialTheme.typography.labelMedium
+            )
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(AcousticEnvironment.entries) { environment ->
+                    FilterChip(
+                        selected =
+                            selectedEnvironment == environment,
+                        onClick = {
+                            onEnvironmentSelected(environment)
+                        },
+                        label = {
+                            Text(environment.displayName)
+                        }
+                    )
+                }
+            }
+
             listening.fallbackReason?.let {
                 Text(
                     text = "Proteção: $it",
