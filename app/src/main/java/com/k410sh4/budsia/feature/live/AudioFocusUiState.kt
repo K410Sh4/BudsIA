@@ -1,5 +1,7 @@
 package com.k410sh4.budsia.feature.live
 
+import com.k410sh4.budsia.core.ai.adaptation.AcousticEnvironment
+import com.k410sh4.budsia.core.ai.adaptation.AdaptiveAudioProfile
 import com.k410sh4.budsia.core.ai.enhancement.NeuralRuntimeTelemetry
 import com.k410sh4.budsia.core.ai.models.ModelInstallStatus
 import com.k410sh4.budsia.core.audio.model.PipelineState
@@ -22,5 +24,7 @@ data class AudioFocusUiState(
     val modelStatuses: List<ModelInstallStatus> = emptyList(),
     val activeModelId: String? = null,
     val neuralTelemetry: NeuralRuntimeTelemetry = NeuralRuntimeTelemetry(),
+    val adaptiveProfile: AdaptiveAudioProfile =
+        AdaptiveAudioProfile.factory(AcousticEnvironment.GENERAL),
     val errorMessage: String? = null
 )
