@@ -7,12 +7,7 @@ import org.junit.Test
 
 class AiPerformanceGovernorTest {
 
-    private val governor = AiPerformanceGovernor(
-        AiPerformancePolicy(
-            stopAiBelowBatteryPercent = 15,
-            ecoBelowBatteryPercent = 25
-        )
-    )
+    private val governor = AiPerformanceGovernor()
 
     @Test
     fun severeThermalForcesDspFallback() {
@@ -30,7 +25,7 @@ class AiPerformanceGovernorTest {
     @Test
     fun lowBatteryWithoutChargingForcesDspFallback() {
         val decision = governor.decide(
-            DevicePerformanceSnapshot(
+            snapshot = DevicePerformanceSnapshot(
                 thermalLevel = ThermalLevel.NONE,
                 batteryPercent = MetricValue(
                     15,
@@ -40,11 +35,46 @@ class AiPerformanceGovernorTest {
                     false,
                     MeasurementKind.MEASURED
                 )
+            ),
+            settings = AiPerformanceSettings(
+                lowBatteryAutoFallbackEnabled = true,
+                stopAiBelowBatteryPercent = 15,
+                ecoBelowBatteryPercent = 25
             )
         )
 
         assertEquals(AiPerformanceTier.DSP_ONLY, decision.tier)
         assertFalse(decision.allowAi)
+    }
+
+    @Test
+    fun disablingLowBatteryFallbackKeepsAiAvailable() {
+        val decision = governor.decide(
+            snapshot = DevicePerformanceSnapshot(
+                thermalLevel = ThermalLevel.NONE,
+                batteryPercent = MetricValue(
+                    10,
+                    MeasurementKind.MEASURED
+                ),
+                isCharging = MetricValue(
+                    false,
+                    MeasurementKind.MEASURED
+                ),
+                lowMemory = MetricValue(
+                    false,
+                    MeasurementKind.MEASURED
+                )
+            ),
+            settings = AiPerformanceSettings(
+                lowBatteryAutoFallbackEnabled = false,
+                stopAiBelowBatteryPercent = 15,
+                ecoBelowBatteryPercent = 25
+            )
+        )
+
+        assertTrue(decision.allowAi)
+        assertFalse(decision.forceFallback)
+        assertEquals(AiPerformanceTier.ECO, decision.tier)
     }
 
     @Test
@@ -96,9 +126,9 @@ class AiPerformanceGovernorTest {
     }
 
     @Test
-    fun androidLowMemoryFlagHasPriority() {
+    fun androidLowMemoryFlagHasPriorityOverUserBatterySetting() {
         val decision = governor.decide(
-            DevicePerformanceSnapshot(
+            snapshot = DevicePerformanceSnapshot(
                 thermalLevel = ThermalLevel.NONE,
                 batteryPercent = MetricValue(
                     100,
@@ -112,6 +142,11 @@ class AiPerformanceGovernorTest {
                     true,
                     MeasurementKind.MEASURED
                 )
+            ),
+            settings = AiPerformanceSettings(
+                lowBatteryAutoFallbackEnabled = false,
+                stopAiBelowBatteryPercent = 5,
+                ecoBelowBatteryPercent = 25
             )
         )
 
