@@ -19,7 +19,7 @@ class NativeAudioEngine {
 public:
     static constexpr std::size_t kWaveformPoints = 72;
     static constexpr std::size_t kSignalMetricCount = 8;
-    static constexpr std::size_t kStatCount = 28;
+    static constexpr std::size_t kStatCount = 30;
 
     enum class EngineState : std::int64_t {
         Stopped = 0,
@@ -189,6 +189,7 @@ private:
     std::atomic<std::int64_t> outputRingHighWatermark_{0};
     std::atomic<std::int64_t> disconnectCount_{0};
     std::atomic<std::int64_t> aiInputDroppedSamples_{0};
+    std::atomic<std::int64_t> aiEnhancedSamples_{0};
 
     std::size_t processingBlockSamples_ = 480;
     std::string lastErrorText_;
