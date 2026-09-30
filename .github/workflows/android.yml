@@ -46,6 +46,11 @@ jobs:
           g++ -std=c++20 -O2 -pthread             tools/native_tests/ring_buffer_test.cpp             -o /tmp/budsia-ring-buffer-test
           /tmp/budsia-ring-buffer-test
 
+      - name: Native spectrum analyzer test
+        run: |
+          g++ -std=c++20 -O2             tools/native_tests/spectrum_analyzer_test.cpp             -o /tmp/budsia-spectrum-test
+          /tmp/budsia-spectrum-test
+
       - name: Fetch verified neural runtime
         run: bash scripts/fetch_sherpa_runtime.sh
 
