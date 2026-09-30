@@ -40,7 +40,25 @@
 - neural output waveform / RMS / peak
 - debug/release CI
 
+## Phase C.3 — Device Validation Lab — IMPLEMENTED
+- 30-second in-app technical validation session
+- requires LISTENING and neural RUNNING before AI tests
+- freezes processing, model, profile, A/B and performance-policy mutations during sampling
+- actual native engine/sample-rate stability
+- native input-drop delta
+- AI-input transport-drop delta
+- output overrun/underrun deltas
+- route-disconnect delta
+- input/output XRuns when exposed
+- neural model/rate compatibility
+- maximum neural realtime factor
+- thermal/headroom/performance-governor telemetry
+- Factory vs adaptive-candidate state captured
+- PASS/WARN/FAIL/UNKNOWN explicitly limited to technical stability
+- no raw-audio persistence
+
 ### Physical-device gate
+- run the short validation lab on each intended route first
 - Galaxy Buds microphone is the native stream's actual input device
 - measure actual HFP/BLE microphone rate on target phone
 - confirm 16 kHz route selects GTCRN automatically

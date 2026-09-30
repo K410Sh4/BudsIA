@@ -83,6 +83,6 @@ jobs:
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: BudsIA-V3-streaming-ai-debug
+          name: BudsIA-V3-device-validation-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error

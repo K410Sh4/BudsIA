@@ -4,6 +4,16 @@ CI validates source, native compilation, runtime packaging, model integrity and 
 It cannot prove acoustic quality, Bluetooth route behavior, thermals or end-to-end latency on
 a specific phone/headset.
 
+## Quick gate first
+
+Before each longer test below, run the built-in 30-second Device Validation Lab for the same
+route and processing mode. It provides a fast technical check for route/sample-rate stability,
+drops, XRuns, AI realtime factor, thermal state and fallback behavior without storing audio.
+
+A short PASS does not replace the longer stress/acoustic procedure.
+
+See `docs/DEVICE_VALIDATION_LAB.md`.
+
 ## Target validation sequence
 
 ### 1. Capture and lifecycle
@@ -34,10 +44,13 @@ a specific phone/headset.
 - verify Android communication mode is restored after stop/error.
 
 ### 5. Neural stress
+- run the 30-second lab first and save the visible technical result manually if needed;
 - keep AI active for at least 20 minutes;
 - induce CPU load;
 - confirm RTF watchdog falls back to DSP if realtime cannot be sustained;
-- verify input/AI drops do not grow silently.
+- verify native input drops and AI-input transport drops do not grow silently;
+- verify output overrun/underrun behavior when private monitoring is enabled;
+- verify route-disconnect count stays stable unless a real disconnect occurs.
 
 ### 6. Acoustic A/B
 Use identical consented material for RAW, DSP and AI.
