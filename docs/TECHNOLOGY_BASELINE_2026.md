@@ -33,6 +33,25 @@ Pinned production candidates:
 The app does not run a model at the wrong sample rate and does not hide resampling behind a
 quality label.
 
+## Android Dynamic Performance Framework
+
+BudsIA uses Android platform scheduling/health signals before considering vendor-specific
+acceleration:
+
+- `PerformanceHintManager` on Android 12+ for the long-lived neural inference thread;
+- `reportActualWorkDuration()` after each measured inference cycle;
+- power-efficiency hinting on Android 15+ when the governor determines it is safe;
+- `PowerManager.getThermalHeadroom()` for current and 10-second predictive thermal margin;
+- Android 16 `SystemHealthManager.getCpuHeadroom()` when supported.
+
+Headroom APIs are sampled outside realtime audio and inference-critical callbacks.
+
+References:
+
+- https://developer.android.com/about/versions/16/features
+- https://developer.android.com/reference/android/os/health/SystemHealthManager
+- https://developer.android.com/reference/android/os/PerformanceHintManager.Session
+
 ## 2026 acceleration policy
 
 NNAPI was deprecated in Android 15 / API 35. BudsIA therefore does not treat NNAPI as the
