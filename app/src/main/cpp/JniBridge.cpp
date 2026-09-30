@@ -1,5 +1,6 @@
 #include <jni.h>
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <new>
@@ -24,7 +25,9 @@ jlong toHandle(NativeAudioEngine* engine) {
 }
 
 ProcessingMode toProcessingMode(jint value) {
-    return value == 0 ? ProcessingMode::Raw : ProcessingMode::Dsp;
+    if (value == 0) return ProcessingMode::Raw;
+    if (value == 2) return ProcessingMode::Ai;
+    return ProcessingMode::Dsp;
 }
 
 }  // namespace
@@ -211,4 +214,80 @@ Java_com_k410sh4_budsia_core_audio_nativecore_NativeAudioBridge_nativeGetLastErr
 
     const auto message = engine->lastError();
     return env->NewStringUTF(message.c_str());
+}
+
+
+extern "C"
+JNIEXPORT jint JNICALL
+Java_com_k410sh4_budsia_core_audio_nativecore_NativeAudioBridge_nativeReadAiInput(
+    JNIEnv* env,
+    jobject,
+    jlong handle,
+    jfloatArray destination,
+    jint requestedCount
+) {
+    auto* engine = fromHandle(handle);
+    if (engine == nullptr || destination == nullptr || requestedCount <= 0) {
+        return 0;
+    }
+
+    const jsize arrayLength = env->GetArrayLength(destination);
+    const jsize count = std::min(arrayLength, requestedCount);
+    if (count <= 0) return 0;
+
+    jboolean isCopy = JNI_FALSE;
+    jfloat* samples = env->GetFloatArrayElements(destination, &isCopy);
+    if (samples == nullptr) return 0;
+
+    const auto read = engine->readAiInput(
+        samples,
+        static_cast<std::size_t>(count)
+    );
+
+    env->ReleaseFloatArrayElements(destination, samples, 0);
+    return static_cast<jint>(read);
+}
+
+extern "C"
+JNIEXPORT jint JNICALL
+Java_com_k410sh4_budsia_core_audio_nativecore_NativeAudioBridge_nativeWriteAiOutput(
+    JNIEnv* env,
+    jobject,
+    jlong handle,
+    jfloatArray source,
+    jint requestedCount
+) {
+    auto* engine = fromHandle(handle);
+    if (engine == nullptr || source == nullptr || requestedCount <= 0) {
+        return 0;
+    }
+
+    const jsize arrayLength = env->GetArrayLength(source);
+    const jsize count = std::min(arrayLength, requestedCount);
+    if (count <= 0) return 0;
+
+    jboolean isCopy = JNI_FALSE;
+    jfloat* samples = env->GetFloatArrayElements(source, &isCopy);
+    if (samples == nullptr) return 0;
+
+    const auto written = engine->writeAiOutput(
+        samples,
+        static_cast<std::size_t>(count)
+    );
+
+    env->ReleaseFloatArrayElements(source, samples, JNI_ABORT);
+    return static_cast<jint>(written);
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_k410sh4_budsia_core_audio_nativecore_NativeAudioBridge_nativeClearAiTransport(
+    JNIEnv*,
+    jobject,
+    jlong handle
+) {
+    auto* engine = fromHandle(handle);
+    if (engine != nullptr) {
+        engine->clearAiTransport();
+    }
 }
