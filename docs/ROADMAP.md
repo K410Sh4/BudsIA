@@ -51,16 +51,21 @@
 - subjective and objective RAW vs DSP vs AI comparison
 - confirm no audible glitches during DSP <-> AI transitions
 
-## Phase D — adaptive profiles — NEXT
+## Phase D — adaptive profiles — IMPLEMENTED, ACTIVATION GATE PENDING
 - immutable factory model
-- versioned local adaptation profile
-- environment profile
-- user feedback: emphasize / keep / reduce / ignore
-- measured profile effectiveness
-- rollback to factory behavior
-- no silent online training
+- versioned local preference profile
+- separate profiles for Geral / Casa / Rua / Trabalho / Carro
+- explicit user feedback: mais filtro / mais natural / está bom assim
+- decaying bounded learning step
+- stable AndroidX DataStore 1.2.1 persistence
+- revision and feedback counters
+- reset to factory preference
+- preference UI with transactional slider commit
+- no raw-audio storage
+- no silent model-weight training
+- learned preference is not applied to live audio until A/B validation is safe
 
-## Phase E — local learning
+## Phase E — local evaluation and learning
 - explicit opt-in local dataset
 - candidate profile/model
 - offline evaluation
