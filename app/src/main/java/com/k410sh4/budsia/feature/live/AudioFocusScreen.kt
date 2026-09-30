@@ -156,16 +156,23 @@ private fun AudioFocusScreen(
     onStartValidation: () -> Unit,
     onCancelValidation: () -> Unit
 ) {
-    val active = state.pipelineState == PipelineState.LISTENING ||
-        state.pipelineState == PipelineState.STARTING ||
-        state.pipelineState == PipelineState.STOPPING
+    val active =
+        state.pipelineState == PipelineState.LISTENING ||
+            state.pipelineState == PipelineState.STARTING ||
+            state.pipelineState == PipelineState.STOPPING
     val stopping = state.pipelineState == PipelineState.STOPPING
     val modelInstalled =
         state.modelStatuses.any {
             it.state == ModelInstallState.INSTALLED
         }
-    val aiRunning =
-        state.neuralTelemetry.state == NeuralPipelineState.RUNNING
+    val layered = remember(state) {
+        state.toLayeredUiState()
+    }
+    var section by remember {
+        androidx.compose.runtime.mutableStateOf(
+            AudioFocusSection.LISTENING
+        )
+    }
 
     val displayedWaveform =
         if (
@@ -185,167 +192,676 @@ private fun AudioFocusScreen(
             .padding(horizontal = 20.dp, vertical = 18.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = "BudsIA",
+                style = MaterialTheme.typography.headlineMedium
+            )
+            Text(
+                text = "Áudio adaptativo local",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+
+        AudioFocusSectionNavigation(
+            selected = section,
+            onSelected = { section = it }
+        )
+
+        when (section) {
+            AudioFocusSection.LISTENING -> {
+                HumanStatusCard(layered.listening)
+
+                WaveformCard(
+                    waveform = displayedWaveform,
+                    active = active,
+                    label = if (layered.listening.aiActive) {
+                        "SAÍDA NEURAL"
+                    } else {
+                        "SINAL"
+                    }
+                )
+
+                ProcessingModeSelector(
+                    selectedMode = state.selectedMode,
+                    aiEnabled = modelInstalled,
+                    onModeSelected = onModeSelected
+                )
+
+                HumanQuickSummaryCard(
+                    listening = layered.listening,
+                    selectedMode = state.selectedMode
+                )
+
+                state.errorMessage?.let {
+                    HumanAlertCard(
+                        category = "Sistema",
+                        title = "Atenção",
+                        detail = it,
+                        severity = UiNoticeSeverity.ERROR
+                    )
+                }
+
+                if (!hasMicrophonePermission) {
+                    Button(
+                        onClick = onRequestMicrophonePermission,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            Icons.Rounded.Mic,
+                            contentDescription = null
+                        )
+                        androidx.compose.foundation.layout.Spacer(
+                            modifier = Modifier.size(8.dp)
+                        )
+                        Text("Permitir microfone")
+                    }
+                } else {
+                    Button(
+                        onClick = if (active) onStop else onStart,
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !stopping,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor =
+                                if (active) {
+                                    Color(0xFF5A1E28)
+                                } else {
+                                    MaterialTheme.colorScheme.primary
+                                }
+                        )
+                    ) {
+                        Icon(
+                            imageVector =
+                                if (active) {
+                                    Icons.Rounded.Stop
+                                } else {
+                                    Icons.Rounded.Mic
+                                },
+                            contentDescription = null
+                        )
+                        androidx.compose.foundation.layout.Spacer(
+                            modifier = Modifier.size(8.dp)
+                        )
+                        Text(
+                            when {
+                                stopping -> "ENCERRANDO..."
+                                active -> "PARAR"
+                                else -> "INICIAR ÁUDIO"
+                            }
+                        )
+                    }
+                }
+
+                Text(
+                    text =
+                        "O áudio bruto não é salvo. A tela principal mostra apenas o necessário; telemetria detalhada fica em Diagnóstico e Dev/IA.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp
+                )
+            }
+
+            AudioFocusSection.ROUTES -> {
+                SectionIntro(
+                    title = "Rotas de áudio",
+                    detail =
+                        "Escolha entrada e saída com nomes humanos. O identificador técnico continua disponível abaixo de cada dispositivo."
+                )
+
+                RouteHumanSummaryCard(layered.routing)
+
+                RoutingCard(
+                    state = state,
+                    active = active,
+                    hasBluetoothConnectPermission =
+                        hasBluetoothConnectPermission,
+                    onRequestBluetoothPermission =
+                        onRequestBluetoothPermission,
+                    onInputSelected = onInputSelected,
+                    onOutputSelected = onOutputSelected,
+                    onMonitoringChanged = onMonitoringChanged
+                )
+            }
+
+            AudioFocusSection.MODELS -> {
+                SectionIntro(
+                    title = "IA e modelos",
+                    detail =
+                        "Modelos, perfil adaptativo e comparação A/B ficam juntos sem poluir a experiência de escuta."
+                )
+
+                ModelHumanSummaryCard(layered.models)
+
+                AiModelCard(
+                    state = state,
+                    onInstallModel = onInstallModel,
+                    onRemoveModel = onRemoveModel
+                )
+
+                AdaptiveProfileCard(
+                    state = state,
+                    onEnvironmentSelected = onEnvironmentSelected,
+                    onPreferredStrengthChanged =
+                        onPreferredStrengthChanged,
+                    onMoreFilter = onMoreFilter,
+                    onMoreNatural = onMoreNatural,
+                    onGoodAsIs = onGoodAsIs,
+                    onResetProfile = onResetProfile,
+                    onAdaptiveControlCandidateChanged =
+                        onAdaptiveControlCandidateChanged
+                )
+
+                AdaptiveAbEvaluationCard(
+                    state = state,
+                    onAuditionFactory = onAuditionFactory,
+                    onAuditionCandidate = onAuditionCandidate,
+                    onRecordChoice = onRecordAbChoice,
+                    onReset = onResetAbEvaluation
+                )
+            }
+
+            AudioFocusSection.DIAGNOSTICS -> {
+                SectionIntro(
+                    title = "Diagnóstico técnico",
+                    detail =
+                        "Aqui ficam RTF, XRuns, CPU, térmico, ADPF e motivos de fallback. Esta área é técnica por design."
+                )
+
+                HumanNoticesCard(
+                    notices = layered.diagnostics.notices
+                )
+
+                PerformanceCard(
+                    state = state,
+                    onLowBatteryAutoFallbackChanged =
+                        onLowBatteryAutoFallbackChanged,
+                    onStopAiBelowBatteryPercentChanged =
+                        onStopAiBelowBatteryPercentChanged
+                )
+
+                if (
+                    state.neuralTelemetry.state !=
+                        NeuralPipelineState.IDLE ||
+                    state.selectedMode ==
+                        RealtimeProcessingMode.AI
+                ) {
+                    NeuralDiagnosticsCard(state)
+                }
+
+                RealtimeDiagnosticsCard(state)
+            }
+
+            AudioFocusSection.LAB -> {
+                SectionIntro(
+                    title = "Validation Lab",
+                    detail =
+                        "Testes reproduzíveis de 30 segundos ficam isolados da experiência normal. PASS/WARN/FAIL mede estabilidade técnica, não qualidade acústica."
+                )
+
+                LabHumanSummaryCard(layered.lab)
+
+                DeviceValidationCard(
+                    state = state,
+                    onStart = onStartValidation,
+                    onCancel = onCancelValidation
+                )
+            }
+
+            AudioFocusSection.DEVELOPER -> {
+                SectionIntro(
+                    title = "Desenvolvedor / IA",
+                    detail =
+                        "Snapshot estruturado da sessão para auditoria, automação e análise por IA. Nenhum áudio bruto faz parte deste estado."
+                )
+
+                DeveloperSnapshotCard(layered.developer)
+            }
+        }
+    }
+}
+
+@Composable
+private fun AudioFocusSectionNavigation(
+    selected: AudioFocusSection,
+    onSelected: (AudioFocusSection) -> Unit
+) {
+    LazyRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        items(AudioFocusSection.entries) { section ->
+            FilterChip(
+                selected = selected == section,
+                onClick = { onSelected(section) },
+                label = { Text(section.label) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun SectionIntro(
+    title: String,
+    detail: String
+) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
         Text(
-            text = "ADAPTIVE AUDIO FOCUS",
+            text = title,
             style = MaterialTheme.typography.titleLarge
         )
-
         Text(
-            text = when {
-                aiRunning -> "● MICROFONE ATIVO • IA LOCAL"
-                active -> "● MICROFONE ATIVO • NATIVE OBOE"
-                else -> "AUDIO CORE • LOCAL"
-            },
-            color = if (active) {
-                Color(0xFF65F0A9)
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
-            style = MaterialTheme.typography.labelLarge
-        )
-
-        WaveformCard(
-            waveform = displayedWaveform,
-            active = active,
-            label = if (aiRunning) "SAÍDA NEURAL" else "SINAL"
-        )
-
-        ProcessingModeSelector(
-            selectedMode = state.selectedMode,
-            aiEnabled = modelInstalled,
-            onModeSelected = onModeSelected
-        )
-
-        AiModelCard(
-            state = state,
-            onInstallModel = onInstallModel,
-            onRemoveModel = onRemoveModel
-        )
-
-        AdaptiveProfileCard(
-            state = state,
-            onEnvironmentSelected = onEnvironmentSelected,
-            onPreferredStrengthChanged = onPreferredStrengthChanged,
-            onMoreFilter = onMoreFilter,
-            onMoreNatural = onMoreNatural,
-            onGoodAsIs = onGoodAsIs,
-            onResetProfile = onResetProfile,
-            onAdaptiveControlCandidateChanged =
-                onAdaptiveControlCandidateChanged
-        )
-
-        AdaptiveAbEvaluationCard(
-            state = state,
-            onAuditionFactory = onAuditionFactory,
-            onAuditionCandidate = onAuditionCandidate,
-            onRecordChoice = onRecordAbChoice,
-            onReset = onResetAbEvaluation
-        )
-
-        PerformanceCard(
-            state = state,
-            onLowBatteryAutoFallbackChanged =
-                onLowBatteryAutoFallbackChanged,
-            onStopAiBelowBatteryPercentChanged =
-                onStopAiBelowBatteryPercentChanged
-        )
-
-        DeviceValidationCard(
-            state = state,
-            onStart = onStartValidation,
-            onCancel = onCancelValidation
-        )
-
-        if (
-            state.neuralTelemetry.state != NeuralPipelineState.IDLE ||
-            state.selectedMode == RealtimeProcessingMode.AI
-        ) {
-            NeuralDiagnosticsCard(state)
-        }
-
-        RealtimeDiagnosticsCard(state)
-
-        RoutingCard(
-            state = state,
-            active = active,
-            hasBluetoothConnectPermission =
-                hasBluetoothConnectPermission,
-            onRequestBluetoothPermission =
-                onRequestBluetoothPermission,
-            onInputSelected = onInputSelected,
-            onOutputSelected = onOutputSelected,
-            onMonitoringChanged = onMonitoringChanged
-        )
-
-        state.errorMessage?.let {
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.errorContainer
-                ),
-                shape = RoundedCornerShape(18.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = it,
-                    modifier = Modifier.padding(14.dp),
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
-        }
-
-        if (!hasMicrophonePermission) {
-            Button(
-                onClick = onRequestMicrophonePermission,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(Icons.Rounded.Mic, contentDescription = null)
-                androidx.compose.foundation.layout.Spacer(
-                    modifier = Modifier.size(8.dp)
-                )
-                Text("Permitir microfone")
-            }
-        } else {
-            Button(
-                onClick = if (active) onStop else onStart,
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !stopping,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (active) {
-                        Color(0xFF5A1E28)
-                    } else {
-                        MaterialTheme.colorScheme.primary
-                    }
-                )
-            ) {
-                Icon(
-                    imageVector = if (active) {
-                        Icons.Rounded.Stop
-                    } else {
-                        Icons.Rounded.Mic
-                    },
-                    contentDescription = null
-                )
-                androidx.compose.foundation.layout.Spacer(
-                    modifier = Modifier.size(8.dp)
-                )
-                Text(
-                    when {
-                        stopping -> "ENCERRANDO..."
-                        active -> "PARAR"
-                        else -> "INICIAR ÁUDIO"
-                    }
-                )
-            }
-        }
-
-        Text(
-            text = "O áudio bruto não é salvo. O modelo é verificado por tamanho e SHA-256 antes de ser usado.",
+            text = detail,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 12.sp
+            style = MaterialTheme.typography.bodySmall
         )
     }
 }
+
+@Composable
+private fun HumanStatusCard(
+    listening: ListeningUiState
+) {
+    val accent = humanToneColor(listening.tone)
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor =
+                when (listening.tone) {
+                    HumanStatusTone.ERROR ->
+                        MaterialTheme.colorScheme.errorContainer
+                    else ->
+                        MaterialTheme.colorScheme.surface
+                }
+        ),
+        shape = RoundedCornerShape(26.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement =
+                    Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = listening.title,
+                        style =
+                            MaterialTheme.typography.titleLarge
+                    )
+                    Text(
+                        text = listening.detail,
+                        color =
+                            MaterialTheme.colorScheme
+                                .onSurfaceVariant,
+                        style =
+                            MaterialTheme.typography.bodyMedium
+                    )
+                }
+                Text(
+                    text = statusSymbol(listening.tone),
+                    color = accent,
+                    fontSize = 28.sp
+                )
+            }
+
+            HorizontalDivider()
+
+            MetricRow("Entrada", listening.inputLabel)
+            MetricRow("Saída", listening.outputLabel)
+            MetricRow(
+                "Áudio processado",
+                listening.monitoringLabel
+            )
+            MetricRow(
+                "Estabilidade",
+                listening.routeStabilityLabel
+            )
+        }
+    }
+}
+
+@Composable
+private fun HumanQuickSummaryCard(
+    listening: ListeningUiState,
+    selectedMode: RealtimeProcessingMode
+) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor =
+                MaterialTheme.colorScheme.surfaceVariant
+        ),
+        shape = RoundedCornerShape(20.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "RESUMO",
+                style = MaterialTheme.typography.labelLarge
+            )
+            MetricRow(
+                "IA",
+                if (listening.aiActive) {
+                    "Ativa localmente"
+                } else if (
+                    selectedMode == RealtimeProcessingMode.AI
+                ) {
+                    "Selecionada · aguardando"
+                } else {
+                    "Desativada"
+                }
+            )
+            MetricRow(
+                "Captura",
+                if (listening.captureActive) {
+                    "Ativa"
+                } else {
+                    "Parada"
+                }
+            )
+            MetricRow(
+                "Ambiente",
+                listening.environmentLabel
+            )
+            listening.fallbackReason?.let {
+                Text(
+                    text = "Proteção: $it",
+                    color = Color(0xFFFFC857),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RouteHumanSummaryCard(
+    routing: RoutingUiState
+) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor =
+                MaterialTheme.colorScheme.surfaceVariant
+        ),
+        shape = RoundedCornerShape(20.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = "ROTA SELECIONADA",
+                style = MaterialTheme.typography.labelLarge
+            )
+            Text(
+                text = routing.inputHumanLabel,
+                style = MaterialTheme.typography.titleMedium
+            )
+            Text(
+                text = routing.inputTechnicalLabel,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall
+            )
+            HorizontalDivider()
+            Text(
+                text = routing.outputHumanLabel,
+                style = MaterialTheme.typography.titleMedium
+            )
+            Text(
+                text = routing.outputTechnicalLabel,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall
+            )
+            if (routing.communicationMode) {
+                Text(
+                    text =
+                        "Rota bidirecional de comunicação controlada pelo Android.",
+                    color = Color(0xFF65F0A9),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ModelHumanSummaryCard(
+    models: ModelsUiState
+) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor =
+                MaterialTheme.colorScheme.surfaceVariant
+        ),
+        shape = RoundedCornerShape(20.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = models.activeModelName,
+                style = MaterialTheme.typography.titleMedium
+            )
+            Text(
+                text = models.selectionReason,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall
+            )
+            MetricRow(
+                "Pacote neural",
+                "${models.installedCount}/${models.totalCount} instalados"
+            )
+        }
+    }
+}
+
+@Composable
+private fun LabHumanSummaryCard(
+    lab: LabUiState
+) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor =
+                MaterialTheme.colorScheme.surfaceVariant
+        ),
+        shape = RoundedCornerShape(20.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            MetricRow("Estado", lab.statusLabel)
+            Text(
+                text = lab.summary,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+    }
+}
+
+@Composable
+private fun HumanNoticesCard(
+    notices: List<UiNotice>
+) {
+    if (notices.isEmpty()) {
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor =
+                    MaterialTheme.colorScheme.surfaceVariant
+            ),
+            shape = RoundedCornerShape(20.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                text = "Nenhum alerta técnico ativo.",
+                modifier = Modifier.padding(16.dp),
+                color = Color(0xFF65F0A9)
+            )
+        }
+        return
+    }
+
+    Column(
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        notices.forEach { notice ->
+            HumanAlertCard(
+                category = notice.category.displayName,
+                title = notice.title,
+                detail = notice.detail,
+                severity = notice.severity
+            )
+        }
+    }
+}
+
+@Composable
+private fun HumanAlertCard(
+    category: String,
+    title: String,
+    detail: String,
+    severity: UiNoticeSeverity
+) {
+    val accent = when (severity) {
+        UiNoticeSeverity.INFO ->
+            MaterialTheme.colorScheme.primary
+        UiNoticeSeverity.WARNING ->
+            Color(0xFFFFC857)
+        UiNoticeSeverity.ERROR ->
+            MaterialTheme.colorScheme.error
+    }
+
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor =
+                MaterialTheme.colorScheme.surfaceVariant
+        ),
+        shape = RoundedCornerShape(18.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = category.uppercase(),
+                color = accent,
+                style = MaterialTheme.typography.labelSmall
+            )
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall
+            )
+            Text(
+                text = detail,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+    }
+}
+
+@Composable
+private fun DeveloperSnapshotCard(
+    developer: DeveloperUiState
+) {
+    val clipboard =
+        androidx.compose.ui.platform.LocalClipboardManager.current
+
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        shape = RoundedCornerShape(22.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = "ADAPTIVE SESSION STATE · SCHEMA V1",
+                style = MaterialTheme.typography.labelLarge
+            )
+
+            Text(
+                text =
+                    "Estado agregado para diagnóstico por IA. Contém rota, inferência, performance e validação; não contém áudio bruto.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall
+            )
+
+            OutlinedButton(
+                onClick = {
+                    clipboard.setText(
+                        androidx.compose.ui.text.AnnotatedString(
+                            developer.json
+                        )
+                    )
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Copiar snapshot JSON")
+            }
+
+            androidx.compose.foundation.text.selection.SelectionContainer {
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor =
+                            MaterialTheme.colorScheme.surfaceVariant
+                    ),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = developer.json,
+                        modifier = Modifier.padding(12.dp),
+                        color =
+                            MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontFamily =
+                            androidx.compose.ui.text.font.FontFamily.Monospace,
+                        fontSize = 11.sp
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun humanToneColor(
+    tone: HumanStatusTone
+): Color = when (tone) {
+    HumanStatusTone.SUCCESS -> Color(0xFF65F0A9)
+    HumanStatusTone.INFO -> Color(0xFF55E6FF)
+    HumanStatusTone.WARNING -> Color(0xFFFFC857)
+    HumanStatusTone.ERROR -> Color(0xFFFF6B7C)
+    HumanStatusTone.INACTIVE -> Color(0xFFAAB7C4)
+}
+
+private fun statusSymbol(
+    tone: HumanStatusTone
+): String = when (tone) {
+    HumanStatusTone.SUCCESS -> "●"
+    HumanStatusTone.INFO -> "●"
+    HumanStatusTone.WARNING -> "!"
+    HumanStatusTone.ERROR -> "×"
+    HumanStatusTone.INACTIVE -> "○"
+}
+
 
 @Composable
 private fun ProcessingModeSelector(
