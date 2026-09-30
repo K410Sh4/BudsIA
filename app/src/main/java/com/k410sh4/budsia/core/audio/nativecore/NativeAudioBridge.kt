@@ -33,5 +33,6 @@ internal class NativeAudioBridge {
     external fun nativeGetStats(handle: Long): LongArray
     external fun nativeGetSignalMetrics(handle: Long): FloatArray
     external fun nativeGetWaveform(handle: Long): FloatArray
+    external fun nativeGetSpectrum(handle: Long): FloatArray
     external fun nativeGetLastError(handle: Long): String
 }
