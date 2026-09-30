@@ -201,6 +201,8 @@ class StreamingAiCoordinator(
             var totalInferenceNanos = 0L
             var maxInferenceNanos = 0L
             var realtimeFactorEma = 0.0
+            val sustainabilityWatchdog =
+                RealtimeSustainabilityWatchdog()
             var lastPublishNanos = 0L
             var latestPerformanceDecision = initialDecision
             var previousPowerEfficiency =
@@ -317,20 +319,39 @@ class StreamingAiCoordinator(
                         (0.10 * currentRtf)
                 }
 
+                val cumulativeRealtimeFactor =
+                    totalInferenceNanos.toDouble() /
+                        chunks.toDouble() /
+                        frameDurationNanos
+
                 if (
-                    chunks >= 100L &&
-                    realtimeFactorEma > 1.10
+                    sustainabilityWatchdog.shouldFallback(
+                        chunksProcessed = chunks,
+                        movingRealtimeFactor = realtimeFactorEma,
+                        cumulativeRealtimeFactor =
+                            cumulativeRealtimeFactor
+                    )
                 ) {
+                    val averageInferenceMs =
+                        totalInferenceNanos.toDouble() /
+                            chunks.toDouble() /
+                            1_000_000.0
                     val reason =
-                        "A IA não sustentou tempo real nesta rota (RTF médio móvel %.2f).".format(
-                            realtimeFactorEma
+                        "A IA não sustentou tempo real nesta rota (RTF móvel %.2f, RTF médio %.2f após aquecimento).".format(
+                            realtimeFactorEma,
+                            cumulativeRealtimeFactor
                         )
                     fallbackToDsp(
                         reason = reason,
                         performanceTier =
                             latestPerformanceDecision.tier,
                         performanceReason =
-                            latestPerformanceDecision.reason
+                            latestPerformanceDecision.reason,
+                        terminalRealtimeFactor =
+                            realtimeFactorEma,
+                        terminalAverageInferenceMs =
+                            averageInferenceMs,
+                        terminalChunksProcessed = chunks
                     )
                     shouldPreserveTerminalState = true
                     return
@@ -479,7 +500,10 @@ class StreamingAiCoordinator(
     private fun fallbackToDsp(
         reason: String,
         performanceTier: AiPerformanceTier? = null,
-        performanceReason: String? = null
+        performanceReason: String? = null,
+        terminalRealtimeFactor: Double? = null,
+        terminalAverageInferenceMs: Double? = null,
+        terminalChunksProcessed: Long? = null
     ) {
         audioEngine.setProcessingMode(RealtimeProcessingMode.DSP)
         transport.clear()
@@ -492,6 +516,15 @@ class StreamingAiCoordinator(
             performanceReason =
                 performanceReason
                     ?: _telemetry.value.performanceReason,
+            realtimeFactor =
+                terminalRealtimeFactor
+                    ?: _telemetry.value.realtimeFactor,
+            averageInferenceMs =
+                terminalAverageInferenceMs
+                    ?: _telemetry.value.averageInferenceMs,
+            chunksProcessed =
+                terminalChunksProcessed
+                    ?: _telemetry.value.chunksProcessed,
             fallbackReason = reason,
             errorMessage = reason
         )
