@@ -4,7 +4,7 @@
 
 BudsIA V3 is an auditable, local-first adaptive audio-focus system.
 
-The architecture deliberately separates capture, deterministic DSP, neural enhancement,
+The architecture separates capture, routing, deterministic DSP, neural enhancement,
 adaptation, output, diagnostics, model lifecycle and UI.
 
 ## Foundation rule
@@ -14,43 +14,65 @@ One module = one responsibility = one observable contract.
 No component is allowed to silently own Bluetooth, capture, neural inference, storage and UI
 at the same time.
 
-## Current pipeline
+## Production live path
 
 ```
-Android microphone
-  -> AudioCaptureEngine
-  -> AudioPreprocessor
-  -> AudioEnhancementEngine
-  -> AudioMetricsAnalyzer
-  -> AudioPipelineSnapshot
-  -> AudioFocusViewModel
-  -> Compose UI
+Android route
+  -> Oboe/AAudio native input callback
+  -> lock-free SPSC input ring
+  -> native processing worker
+  -> RAW or DSP processor
+  -> lock-free SPSC output ring
+  -> optional native output callback
 ```
 
-The current enhancement implementation is an explicit BYPASS fallback. It is not presented
-as AI. This makes the foundation testable before a neural model is introduced.
+Kotlin is not in the per-audio-frame path.
+
+It performs:
+
+- lifecycle/control;
+- route description;
+- Compose state;
+- telemetry polling;
+- user-visible errors.
+
+## Reference path
+
+The original Kotlin `AudioCaptureEngine -> AudioFocusPipeline` remains available as a
+deterministic reference/test path.
+
+It is not the production realtime route.
 
 ## Surgical replacement points
 
-- `AudioCaptureEngine`: capture backend
-- `AudioPreprocessor`: deterministic DSP
-- `AudioEnhancementEngine`: neural filter
-- `AudioMetricsAnalyzer`: signal metrics
-- `MonotonicClock`: latency timing
-- `AudioFocusPipeline`: orchestration only
+Native:
+- input/output stream builder;
+- ring buffer;
+- realtime processor;
+- future neural processor.
 
-Hilt binds implementations to these contracts.
+Kotlin:
+- `RealtimeAudioEngine`: control/telemetry contract;
+- `AudioRouteMonitor`: Android device catalog;
+- `AudioFocusViewModel`: screen state only;
+- Compose UI.
+
+Future ONNX inference will implement the processor boundary without changing UI or route code.
 
 ## Failure policy
 
-A future neural engine must fail closed to a safe audio path:
+Safe degradation:
 
-AI -> DSP_ONLY -> RAW
+AI -> DSP -> RAW
 
-A neural failure must never block stop controls or leave microphone capture orphaned.
+For the current phase:
+- output failure disables monitor but keeps input analysis alive;
+- input failure moves the engine to ERROR;
+- STOP remains user-accessible;
+- no background capture service exists.
 
 ## Privacy
 
-The foundation does not write raw microphone audio to disk.
-No conversation content is logged.
-Diagnostic audio capture, if later implemented, must be explicit and user-visible.
+Raw PCM remains in memory.
+Leaving the live screen stops the session.
+Conversation/audio content is not written to Logcat.
