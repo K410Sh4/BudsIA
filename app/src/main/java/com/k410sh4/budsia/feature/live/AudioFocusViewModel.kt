@@ -2,6 +2,8 @@ package com.k410sh4.budsia.feature.live
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.k410sh4.budsia.core.ai.adaptation.AdaptiveFeedback
+import com.k410sh4.budsia.core.ai.adaptation.AdaptiveProfileController
 import com.k410sh4.budsia.core.ai.enhancement.NeuralPipelineState
 import com.k410sh4.budsia.core.ai.enhancement.StreamingAiCoordinator
 import com.k410sh4.budsia.core.ai.models.AiModelCatalog
@@ -31,7 +33,8 @@ class AudioFocusViewModel @Inject constructor(
     private val realtimeAudioEngine: RealtimeAudioEngine,
     private val routeMonitor: AudioRouteMonitor,
     private val modelManager: ModelManager,
-    private val aiCoordinator: StreamingAiCoordinator
+    private val aiCoordinator: StreamingAiCoordinator,
+    private val adaptiveProfileController: AdaptiveProfileController
 ) : ViewModel() {
 
     private val modelId = AiModelCatalog.DPDFNET2_48K_HR.id
@@ -42,6 +45,7 @@ class AudioFocusViewModel @Inject constructor(
     private var sessionJob: Job? = null
     private var aiJob: Job? = null
     private var modelJob: Job? = null
+    private var learningJob: Job? = null
 
     init {
         viewModelScope.launch(Dispatchers.IO) {
@@ -73,6 +77,22 @@ class AudioFocusViewModel @Inject constructor(
                         errorMessage = telemetry.errorMessage
                             ?: current.errorMessage
                     )
+                }
+            }
+        }
+
+        viewModelScope.launch {
+            adaptiveProfileController.profiles.collect { profiles ->
+                _uiState.update {
+                    it.copy(adaptiveProfiles = profiles)
+                }
+            }
+        }
+
+        viewModelScope.launch {
+            adaptiveProfileController.activeProfile.collect { profile ->
+                _uiState.update {
+                    it.copy(activeAdaptiveProfile = profile)
                 }
             }
         }
@@ -108,7 +128,8 @@ class AudioFocusViewModel @Inject constructor(
         _uiState.update {
             it.copy(
                 pipelineState = PipelineState.STARTING,
-                errorMessage = null
+                errorMessage = null,
+                learningMessage = null
             )
         }
 
@@ -247,7 +268,8 @@ class AudioFocusViewModel @Inject constructor(
         _uiState.update {
             it.copy(
                 selectedMode = mode,
-                errorMessage = null
+                errorMessage = null,
+                learningMessage = null
             )
         }
 
@@ -261,6 +283,54 @@ class AudioFocusViewModel @Inject constructor(
             aiJob?.cancel()
             aiJob = null
             realtimeAudioEngine.setProcessingMode(mode)
+        }
+    }
+
+    fun selectAdaptiveProfile(profileId: String) {
+        if (learningJob?.isActive == true) return
+
+        learningJob = viewModelScope.launch(Dispatchers.IO) {
+            val result = adaptiveProfileController.activate(profileId)
+            _uiState.update {
+                it.copy(
+                    learningMessage = if (result.isSuccess) {
+                        "Perfil acústico atualizado."
+                    } else {
+                        null
+                    },
+                    errorMessage = result.exceptionOrNull()?.message
+                )
+            }
+        }
+    }
+
+    fun teachAi(feedback: AdaptiveFeedback) {
+        if (
+            _uiState.value.selectedMode != RealtimeProcessingMode.AI ||
+            _uiState.value.neuralTelemetry.state != NeuralPipelineState.RUNNING
+        ) {
+            _uiState.update {
+                it.copy(
+                    errorMessage =
+                        "Use o modo IA em execução antes de ensinar o perfil."
+                )
+            }
+            return
+        }
+
+        if (learningJob?.isActive == true) return
+
+        learningJob = viewModelScope.launch(Dispatchers.IO) {
+            val result = adaptiveProfileController.teach(feedback)
+
+            _uiState.update {
+                it.copy(
+                    learningMessage = result.getOrNull()?.let { profile ->
+                        "Aprendido em ${profile.name}: intensidade neural ${(profile.neuralMix * 100f).toInt()}%."
+                    },
+                    errorMessage = result.exceptionOrNull()?.message
+                )
+            }
         }
     }
 
@@ -331,7 +401,12 @@ class AudioFocusViewModel @Inject constructor(
     }
 
     fun clearError() {
-        _uiState.update { it.copy(errorMessage = null) }
+        _uiState.update {
+            it.copy(
+                errorMessage = null,
+                learningMessage = null
+            )
+        }
         aiCoordinator.resetTelemetry()
     }
 
@@ -344,6 +419,7 @@ class AudioFocusViewModel @Inject constructor(
     }
 
     override fun onCleared() {
+        learningJob?.cancel()
         aiJob?.cancel()
         sessionJob?.cancel()
         realtimeAudioEngine.stop()
