@@ -8,7 +8,9 @@ data class AudioDeviceDescriptor(
     val type: Int,
     val typeLabel: String,
     val isInput: Boolean,
-    val isOutput: Boolean
+    val isOutput: Boolean,
+    val isBluetooth: Boolean,
+    val isCommunicationCapable: Boolean
 )
 
 data class AudioDeviceCatalog(

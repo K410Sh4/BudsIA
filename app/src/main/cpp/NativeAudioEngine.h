@@ -35,7 +35,12 @@ public:
     NativeAudioEngine(const NativeAudioEngine&) = delete;
     NativeAudioEngine& operator=(const NativeAudioEngine&) = delete;
 
-    int start(int inputDeviceId, int outputDeviceId, ProcessingMode mode);
+    int start(
+        int inputDeviceId,
+        int outputDeviceId,
+        ProcessingMode mode,
+        bool communicationMode
+    );
     void stop();
 
     int setMonitoring(bool enabled);
@@ -107,7 +112,10 @@ private:
 
     static constexpr std::size_t kRingCapacity = 1u << 16;
 
-    oboe::Result openInputStream(int requestedDeviceId);
+    oboe::Result openInputStream(
+        int requestedDeviceId,
+        bool communicationMode
+    );
     oboe::Result openOutputStream(int requestedDeviceId);
     void closeStreams() noexcept;
     void resetRuntimeState() noexcept;

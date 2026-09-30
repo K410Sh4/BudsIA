@@ -18,7 +18,8 @@ class NativeRealtimeAudioEngine internal constructor(
             handle = handle,
             inputDeviceId = config.inputDeviceId,
             outputDeviceId = config.outputDeviceId,
-            processingMode = config.processingMode.nativeValue
+            processingMode = config.processingMode.nativeValue,
+            communicationMode = config.communicationMode
         )
 
         return if (code == 0) {

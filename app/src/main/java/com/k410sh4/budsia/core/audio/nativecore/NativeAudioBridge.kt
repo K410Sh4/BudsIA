@@ -13,7 +13,8 @@ internal class NativeAudioBridge {
         handle: Long,
         inputDeviceId: Int,
         outputDeviceId: Int,
-        processingMode: Int
+        processingMode: Int,
+        communicationMode: Boolean
     ): Int
     external fun nativeStop(handle: Long)
     external fun nativeSetMonitoring(handle: Long, enabled: Boolean): Int

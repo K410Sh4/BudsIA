@@ -5,11 +5,17 @@ import com.k410sh4.budsia.core.ai.models.ModelInstallStatus
 import com.k410sh4.budsia.core.audio.model.PipelineState
 import com.k410sh4.budsia.core.audio.realtime.RealtimeAudioSnapshot
 import com.k410sh4.budsia.core.audio.realtime.RealtimeProcessingMode
+import com.k410sh4.budsia.core.audio.routing.AudioDeviceDescriptor
 
 data class AudioFocusUiState(
     val pipelineState: PipelineState = PipelineState.IDLE,
     val snapshot: RealtimeAudioSnapshot? = null,
     val selectedMode: RealtimeProcessingMode = RealtimeProcessingMode.DSP,
+    val availableInputs: List<AudioDeviceDescriptor> = emptyList(),
+    val availableOutputs: List<AudioDeviceDescriptor> = emptyList(),
+    val selectedInputDeviceId: Int = 0,
+    val selectedOutputDeviceId: Int = 0,
+    val preparedCommunicationMode: Boolean = false,
     val inputRouteLabel: String = "—",
     val outputRouteLabel: String = "—",
     val canMonitorOutput: Boolean = false,

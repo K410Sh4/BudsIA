@@ -12,7 +12,9 @@ import com.k410sh4.budsia.core.audio.pipeline.AudioFocusPipeline
 import com.k410sh4.budsia.core.audio.realtime.NativeRealtimeAudioEngine
 import com.k410sh4.budsia.core.audio.realtime.RealtimeAiTransport
 import com.k410sh4.budsia.core.audio.realtime.RealtimeAudioEngine
+import com.k410sh4.budsia.core.audio.routing.AndroidAudioRouteController
 import com.k410sh4.budsia.core.audio.routing.AndroidAudioRouteMonitor
+import com.k410sh4.budsia.core.audio.routing.AudioRouteController
 import com.k410sh4.budsia.core.audio.routing.AudioRouteMonitor
 import com.k410sh4.budsia.core.diagnostics.AndroidMonotonicClock
 import com.k410sh4.budsia.core.diagnostics.MonotonicClock
@@ -91,4 +93,10 @@ object AudioModule {
     fun provideAudioRouteMonitor(
         @ApplicationContext context: Context
     ): AudioRouteMonitor = AndroidAudioRouteMonitor(context)
+
+    @Provides
+    @Singleton
+    fun provideAudioRouteController(
+        @ApplicationContext context: Context
+    ): AudioRouteController = AndroidAudioRouteController(context)
 }

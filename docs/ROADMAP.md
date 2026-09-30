@@ -51,6 +51,24 @@
 - subjective and objective RAW vs DSP vs AI comparison
 - confirm no audible glitches during DSP <-> AI transitions
 
+## Phase B.1 — explicit device routing — IMPLEMENTED, DEVICE VALIDATION PENDING
+- selectable input/output devices
+- Android 12+ `setCommunicationDevice()` for Bluetooth microphone routes
+- `BLUETOOTH_CONNECT` runtime permission
+- Oboe `VoiceCommunication` preset priority for prepared communication input
+- actual opened device IDs retained as the source of truth
+- Android owns communication output when Bluetooth microphone input is active
+- communication route is cleared only when BudsIA owns it
+- Android 11 explicit Bluetooth routing fails clearly instead of using deprecated SCO APIs
+
+### Routing device gate
+- Galaxy Buds microphone appears in input catalog
+- selected Buds input is the native stream's actual input device
+- active route survives 15+ minute session
+- disconnect/reconnect behavior is explicit and recoverable
+- output does not accidentally fall back to phone speaker
+- sample-rate/bandwidth reported for HFP and BLE routes
+
 ## Phase D — adaptive profiles — NEXT
 - immutable factory model
 - versioned local adaptation profile

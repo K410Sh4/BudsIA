@@ -2,6 +2,7 @@ package com.k410sh4.budsia
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -20,6 +21,7 @@ import dagger.hilt.android.AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         setContent {
             BudsIATheme {
                 var hasMicPermission by remember {
@@ -31,19 +33,51 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
-                val permissionLauncher = rememberLauncherForActivityResult(
-                    ActivityResultContracts.RequestPermission()
-                ) { granted ->
-                    hasMicPermission = granted
+                var hasBluetoothPermission by remember {
+                    mutableStateOf(hasBluetoothConnectPermission())
                 }
+
+                val micPermissionLauncher =
+                    rememberLauncherForActivityResult(
+                        ActivityResultContracts.RequestPermission()
+                    ) { granted ->
+                        hasMicPermission = granted
+                    }
+
+                val bluetoothPermissionLauncher =
+                    rememberLauncherForActivityResult(
+                        ActivityResultContracts.RequestPermission()
+                    ) { granted ->
+                        hasBluetoothPermission = granted
+                    }
 
                 AudioFocusRoute(
                     hasMicrophonePermission = hasMicPermission,
+                    hasBluetoothConnectPermission =
+                        hasBluetoothPermission,
                     onRequestMicrophonePermission = {
-                        permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                        micPermissionLauncher.launch(
+                            Manifest.permission.RECORD_AUDIO
+                        )
+                    },
+                    onRequestBluetoothPermission = {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                            bluetoothPermissionLauncher.launch(
+                                Manifest.permission.BLUETOOTH_CONNECT
+                            )
+                        } else {
+                            hasBluetoothPermission = true
+                        }
                     }
                 )
             }
         }
     }
+
+    private fun hasBluetoothConnectPermission(): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.BLUETOOTH_CONNECT
+            ) == PackageManager.PERMISSION_GRANTED
 }

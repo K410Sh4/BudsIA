@@ -12,6 +12,7 @@ import com.k410sh4.budsia.core.audio.realtime.RealtimeAudioConfig
 import com.k410sh4.budsia.core.audio.realtime.RealtimeAudioEngine
 import com.k410sh4.budsia.core.audio.realtime.RealtimeEngineState
 import com.k410sh4.budsia.core.audio.realtime.RealtimeProcessingMode
+import com.k410sh4.budsia.core.audio.routing.AudioRouteController
 import com.k410sh4.budsia.core.audio.routing.AudioRouteMonitor
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -30,6 +31,7 @@ import kotlinx.coroutines.launch
 class AudioFocusViewModel @Inject constructor(
     private val realtimeAudioEngine: RealtimeAudioEngine,
     private val routeMonitor: AudioRouteMonitor,
+    private val routeController: AudioRouteController,
     private val modelManager: ModelManager,
     private val aiCoordinator: StreamingAiCoordinator
 ) : ViewModel() {
@@ -46,6 +48,48 @@ class AudioFocusViewModel @Inject constructor(
     init {
         viewModelScope.launch(Dispatchers.IO) {
             modelManager.refresh()
+        }
+
+        viewModelScope.launch {
+            routeMonitor.devices.collect { catalog ->
+                _uiState.update { current ->
+                    val idle = current.pipelineState == PipelineState.IDLE ||
+                        current.pipelineState == PipelineState.ERROR
+
+                    val selectedInput = if (
+                        current.selectedInputDeviceId == 0 ||
+                        catalog.inputs.any {
+                            it.id == current.selectedInputDeviceId
+                        }
+                    ) {
+                        current.selectedInputDeviceId
+                    } else if (idle) {
+                        0
+                    } else {
+                        current.selectedInputDeviceId
+                    }
+
+                    val selectedOutput = if (
+                        current.selectedOutputDeviceId == 0 ||
+                        catalog.outputs.any {
+                            it.id == current.selectedOutputDeviceId
+                        }
+                    ) {
+                        current.selectedOutputDeviceId
+                    } else if (idle) {
+                        0
+                    } else {
+                        current.selectedOutputDeviceId
+                    }
+
+                    current.copy(
+                        availableInputs = catalog.inputs,
+                        availableOutputs = catalog.outputs,
+                        selectedInputDeviceId = selectedInput,
+                        selectedOutputDeviceId = selectedOutput
+                    )
+                }
+            }
         }
 
         viewModelScope.launch {
@@ -104,6 +148,8 @@ class AudioFocusViewModel @Inject constructor(
         }
 
         val initialMode = current.selectedMode
+        val requestedInputDeviceId = current.selectedInputDeviceId
+        val requestedOutputDeviceId = current.selectedOutputDeviceId
 
         _uiState.update {
             it.copy(
@@ -113,10 +159,34 @@ class AudioFocusViewModel @Inject constructor(
         }
 
         sessionJob = viewModelScope.launch(Dispatchers.Default) {
-            // Never open the native stream directly in AI mode. Model loading
-            // and integrity checks can take longer than the realtime ring.
-            // Start on deterministic DSP, then let StreamingAiCoordinator
-            // atomically switch the engine to AI only after the model is ready.
+            val preparedRoute = routeController.prepare(
+                inputDeviceId = requestedInputDeviceId,
+                outputDeviceId = requestedOutputDeviceId
+            )
+
+            if (!preparedRoute.success) {
+                _uiState.update {
+                    it.copy(
+                        pipelineState = PipelineState.ERROR,
+                        preparedCommunicationMode = false,
+                        errorMessage = preparedRoute.message
+                            ?: "Não foi possível preparar a rota de áudio."
+                    )
+                }
+                sessionJob = null
+                return@launch
+            }
+
+            _uiState.update {
+                it.copy(
+                    preparedCommunicationMode =
+                        preparedRoute.communicationMode
+                )
+            }
+
+            // Model loading/checks can take longer than the realtime buffer.
+            // Start deterministically in DSP and switch to AI only after the
+            // verified model is fully prepared by StreamingAiCoordinator.
             val bootMode = if (initialMode == RealtimeProcessingMode.AI) {
                 RealtimeProcessingMode.DSP
             } else {
@@ -125,14 +195,20 @@ class AudioFocusViewModel @Inject constructor(
 
             val startResult = realtimeAudioEngine.start(
                 RealtimeAudioConfig(
-                    processingMode = bootMode
+                    inputDeviceId = preparedRoute.inputDeviceId,
+                    outputDeviceId = preparedRoute.outputDeviceId,
+                    processingMode = bootMode,
+                    communicationMode =
+                        preparedRoute.communicationMode
                 )
             )
 
             if (!startResult.success) {
+                routeController.release()
                 _uiState.update {
                     it.copy(
                         pipelineState = PipelineState.ERROR,
+                        preparedCommunicationMode = false,
                         errorMessage = startResult.message
                             ?: "Falha ao iniciar o núcleo de áudio."
                     )
@@ -209,18 +285,21 @@ class AudioFocusViewModel @Inject constructor(
                 aiJob?.cancel()
                 aiJob = null
                 realtimeAudioEngine.stop()
+                routeController.release()
 
                 _uiState.update {
                     if (it.pipelineState == PipelineState.ERROR) {
                         it.copy(
                             snapshot = null,
-                            canMonitorOutput = false
+                            canMonitorOutput = false,
+                            preparedCommunicationMode = false
                         )
                     } else {
                         it.copy(
                             pipelineState = PipelineState.IDLE,
                             snapshot = null,
-                            canMonitorOutput = false
+                            canMonitorOutput = false,
+                            preparedCommunicationMode = false
                         )
                     }
                 }
@@ -238,6 +317,54 @@ class AudioFocusViewModel @Inject constructor(
 
         aiJob?.cancel()
         sessionJob?.cancel()
+    }
+
+    fun selectInputDevice(deviceId: Int) {
+        if (!routeSelectionAllowed()) return
+
+        val valid = deviceId == 0 ||
+            _uiState.value.availableInputs.any { it.id == deviceId }
+
+        if (!valid) {
+            _uiState.update {
+                it.copy(
+                    errorMessage =
+                        "A entrada selecionada não está disponível."
+                )
+            }
+            return
+        }
+
+        _uiState.update {
+            it.copy(
+                selectedInputDeviceId = deviceId,
+                errorMessage = null
+            )
+        }
+    }
+
+    fun selectOutputDevice(deviceId: Int) {
+        if (!routeSelectionAllowed()) return
+
+        val valid = deviceId == 0 ||
+            _uiState.value.availableOutputs.any { it.id == deviceId }
+
+        if (!valid) {
+            _uiState.update {
+                it.copy(
+                    errorMessage =
+                        "A saída selecionada não está disponível."
+                )
+            }
+            return
+        }
+
+        _uiState.update {
+            it.copy(
+                selectedOutputDeviceId = deviceId,
+                errorMessage = null
+            )
+        }
     }
 
     fun setProcessingMode(mode: RealtimeProcessingMode) {
@@ -345,6 +472,23 @@ class AudioFocusViewModel @Inject constructor(
         aiCoordinator.resetTelemetry()
     }
 
+    private fun routeSelectionAllowed(): Boolean {
+        val allowed =
+            _uiState.value.pipelineState == PipelineState.IDLE ||
+                _uiState.value.pipelineState == PipelineState.ERROR
+
+        if (!allowed) {
+            _uiState.update {
+                it.copy(
+                    errorMessage =
+                        "Pare o áudio antes de trocar entrada ou saída."
+                )
+            }
+        }
+
+        return allowed
+    }
+
     private fun launchAiWorker() {
         if (aiJob?.isActive == true) return
 
@@ -357,6 +501,7 @@ class AudioFocusViewModel @Inject constructor(
         aiJob?.cancel()
         sessionJob?.cancel()
         realtimeAudioEngine.stop()
+        routeController.release()
         super.onCleared()
     }
 }

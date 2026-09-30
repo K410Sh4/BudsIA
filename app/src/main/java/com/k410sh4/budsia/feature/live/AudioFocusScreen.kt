@@ -49,12 +49,15 @@ import com.k410sh4.budsia.core.ai.enhancement.NeuralPipelineState
 import com.k410sh4.budsia.core.ai.models.ModelInstallState
 import com.k410sh4.budsia.core.audio.model.PipelineState
 import com.k410sh4.budsia.core.audio.realtime.RealtimeProcessingMode
+import com.k410sh4.budsia.core.audio.routing.AudioDeviceDescriptor
 import java.util.Locale
 
 @Composable
 fun AudioFocusRoute(
     hasMicrophonePermission: Boolean,
+    hasBluetoothConnectPermission: Boolean,
     onRequestMicrophonePermission: () -> Unit,
+    onRequestBluetoothPermission: () -> Unit,
     viewModel: AudioFocusViewModel = viewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -75,10 +78,14 @@ fun AudioFocusRoute(
     AudioFocusScreen(
         state = state,
         hasMicrophonePermission = hasMicrophonePermission,
+        hasBluetoothConnectPermission = hasBluetoothConnectPermission,
         onRequestMicrophonePermission = onRequestMicrophonePermission,
+        onRequestBluetoothPermission = onRequestBluetoothPermission,
         onStart = viewModel::start,
         onStop = viewModel::stop,
         onModeSelected = viewModel::setProcessingMode,
+        onInputSelected = viewModel::selectInputDevice,
+        onOutputSelected = viewModel::selectOutputDevice,
         onMonitoringChanged = viewModel::setMonitoring,
         onInstallModel = viewModel::installAiModel,
         onRemoveModel = viewModel::removeAiModel
@@ -89,10 +96,14 @@ fun AudioFocusRoute(
 private fun AudioFocusScreen(
     state: AudioFocusUiState,
     hasMicrophonePermission: Boolean,
+    hasBluetoothConnectPermission: Boolean,
     onRequestMicrophonePermission: () -> Unit,
+    onRequestBluetoothPermission: () -> Unit,
     onStart: () -> Unit,
     onStop: () -> Unit,
     onModeSelected: (RealtimeProcessingMode) -> Unit,
+    onInputSelected: (Int) -> Unit,
+    onOutputSelected: (Int) -> Unit,
     onMonitoringChanged: (Boolean) -> Unit,
     onInstallModel: () -> Unit,
     onRemoveModel: () -> Unit
@@ -173,6 +184,12 @@ private fun AudioFocusScreen(
         RoutingCard(
             state = state,
             active = active,
+            hasBluetoothConnectPermission =
+                hasBluetoothConnectPermission,
+            onRequestBluetoothPermission =
+                onRequestBluetoothPermission,
+            onInputSelected = onInputSelected,
+            onOutputSelected = onOutputSelected,
             onMonitoringChanged = onMonitoringChanged
         )
 
@@ -531,9 +548,16 @@ private fun RealtimeDiagnosticsCard(
 private fun RoutingCard(
     state: AudioFocusUiState,
     active: Boolean,
+    hasBluetoothConnectPermission: Boolean,
+    onRequestBluetoothPermission: () -> Unit,
+    onInputSelected: (Int) -> Unit,
+    onOutputSelected: (Int) -> Unit,
     onMonitoringChanged: (Boolean) -> Unit
 ) {
     val snapshot = state.snapshot
+    val selectedInput = state.availableInputs
+        .firstOrNull { it.id == state.selectedInputDeviceId }
+    val bluetoothInputSelected = selectedInput?.isBluetooth == true
 
     Card(
         colors = CardDefaults.cardColors(
@@ -544,15 +568,69 @@ private fun RoutingCard(
     ) {
         Column(
             modifier = Modifier.padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
                 text = "ROTEAMENTO",
                 style = MaterialTheme.typography.labelLarge
             )
-            MetricRow("Entrada", state.inputRouteLabel)
-            MetricRow("Saída", state.outputRouteLabel)
+
+            Text(
+                text = "Entrada",
+                style = MaterialTheme.typography.labelMedium
+            )
+            RouteSelector(
+                devices = state.availableInputs,
+                selectedDeviceId = state.selectedInputDeviceId,
+                defaultLabel = "Automática",
+                enabled = !active,
+                onSelected = onInputSelected
+            )
+
+            Text(
+                text = "Saída",
+                style = MaterialTheme.typography.labelMedium
+            )
+            RouteSelector(
+                devices = state.availableOutputs,
+                selectedDeviceId = state.selectedOutputDeviceId,
+                defaultLabel = "Automática",
+                enabled = !active,
+                onSelected = onOutputSelected
+            )
+
+            if (bluetoothInputSelected) {
+                Text(
+                    text = "Com microfone Bluetooth, o Android controla a rota de comunicação de entrada e saída; a saída ativa real aparece abaixo.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp
+                )
+            }
+
+            if (
+                bluetoothInputSelected &&
+                !hasBluetoothConnectPermission
+            ) {
+                Button(
+                    onClick = onRequestBluetoothPermission,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Permitir dispositivos próximos")
+                }
+            }
+
+            if (state.preparedCommunicationMode) {
+                Text(
+                    text = "Rota de comunicação Bluetooth preparada pelo Android.",
+                    color = Color(0xFF65F0A9),
+                    fontSize = 12.sp
+                )
+            }
+
             HorizontalDivider()
+
+            MetricRow("Entrada ativa", state.inputRouteLabel)
+            MetricRow("Saída ativa", state.outputRouteLabel)
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -581,6 +659,46 @@ private fun RoutingCard(
                             )
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun RouteSelector(
+    devices: List<AudioDeviceDescriptor>,
+    selectedDeviceId: Int,
+    defaultLabel: String,
+    enabled: Boolean,
+    onSelected: (Int) -> Unit
+) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        FilterChip(
+            selected = selectedDeviceId == 0,
+            onClick = { onSelected(0) },
+            enabled = enabled,
+            label = { Text(defaultLabel) }
+        )
+
+        devices.forEach { device ->
+            FilterChip(
+                selected = selectedDeviceId == device.id,
+                onClick = { onSelected(device.id) },
+                enabled = enabled,
+                label = {
+                    Text(
+                        text = buildString {
+                            append(device.productName)
+                            append(" • ")
+                            append(device.typeLabel)
+                            if (device.isBluetooth) {
+                                append(" • BT")
+                            }
+                        }
+                    )
+                }
+            )
         }
     }
 }

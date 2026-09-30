@@ -89,7 +89,9 @@ class AndroidAudioRouteMonitor(
             type = type,
             typeLabel = typeLabel(type),
             isInput = isSource,
-            isOutput = isSink
+            isOutput = isSink,
+            isBluetooth = type in BLUETOOTH_TYPES,
+            isCommunicationCapable = type in COMMUNICATION_TYPES
         )
 
     private fun fallbackName(type: Int): String = when (type) {
@@ -114,6 +116,20 @@ class AndroidAudioRouteMonitor(
     }
 
     companion object {
+        private val BLUETOOTH_TYPES = setOf(
+            AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
+            AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+            AudioDeviceInfo.TYPE_BLE_HEADSET,
+            AudioDeviceInfo.TYPE_BLE_SPEAKER
+        )
+
+        private val COMMUNICATION_TYPES = setOf(
+            AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
+            AudioDeviceInfo.TYPE_BLE_HEADSET,
+            AudioDeviceInfo.TYPE_WIRED_HEADSET,
+            AudioDeviceInfo.TYPE_USB_HEADSET
+        )
+
         private val PRIVATE_OUTPUT_TYPES = setOf(
             AudioDeviceInfo.TYPE_WIRED_HEADSET,
             AudioDeviceInfo.TYPE_WIRED_HEADPHONES,

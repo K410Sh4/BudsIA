@@ -65,7 +65,8 @@ Java_com_k410sh4_budsia_core_audio_nativecore_NativeAudioBridge_nativeStart(
     jlong handle,
     jint inputDeviceId,
     jint outputDeviceId,
-    jint processingMode
+    jint processingMode,
+    jboolean communicationMode
 ) {
     auto* engine = fromHandle(handle);
     if (engine == nullptr) return -20001;
@@ -73,7 +74,8 @@ Java_com_k410sh4_budsia_core_audio_nativecore_NativeAudioBridge_nativeStart(
     return engine->start(
         inputDeviceId,
         outputDeviceId,
-        toProcessingMode(processingMode)
+        toProcessingMode(processingMode),
+        communicationMode == JNI_TRUE
     );
 }
 

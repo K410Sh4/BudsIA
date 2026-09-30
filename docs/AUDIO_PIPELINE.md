@@ -72,3 +72,26 @@ No Bluetooth codec latency or acoustic round-trip latency is invented.
 ## Persistence
 
 Raw audio is not saved.
+
+## Explicit route preparation
+
+Before the native stream starts, the selected route is prepared on Android.
+
+For a normal phone, wired or USB input, BudsIA passes the selected device ID directly to
+Oboe.
+
+For a Bluetooth communication microphone on Android 12+:
+
+1. BudsIA requires `BLUETOOTH_CONNECT`;
+2. it preserves the pre-session `AudioManager.mode`;
+3. it sets `MODE_IN_COMMUNICATION`;
+4. it calls `setCommunicationDevice()`;
+5. the Oboe input builder prefers `VoiceCommunication`;
+6. Oboe opens the selected input device;
+7. the app reports the actual opened device ID, not the requested label;
+8. on session end, the communication device is cleared and the previous audio mode is restored.
+
+When a Bluetooth microphone is active, Android owns the paired communication output route.
+BudsIA therefore leaves the native output device on the system communication route rather
+than trying to combine HFP microphone input with a separately forced A2DP output.
+
