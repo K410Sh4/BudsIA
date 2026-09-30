@@ -50,6 +50,19 @@
 - output underrun test with monitoring enabled
 - RAW vs DSP vs AI listening comparison
 
+## Phase C.2 — AI performance governor — IMPLEMENTED, DEVICE VALIDATION PENDING
+- Android thermal status monitoring
+- measured battery and charging state
+- measured available/total memory
+- Android low-memory flag
+- estimated process CPU load
+- severe thermal -> automatic AI to DSP fallback
+- low-memory -> automatic AI to DSP fallback
+- optional battery threshold fallback, OFF by default
+- configurable stop threshold from 5% to 30%
+- transparent MEASURED / ESTIMATED / UNKNOWN labels
+- performance recommendations do not silently switch incompatible models
+
 ## Phase D — adaptive profiles — CANDIDATE LIVE CONTROL IMPLEMENTED, DEFAULT OFF
 - immutable factory model remains unchanged
 - stable DataStore 1.2.1 persistence
