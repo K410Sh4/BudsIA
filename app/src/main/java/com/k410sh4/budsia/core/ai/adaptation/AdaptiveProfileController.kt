@@ -34,7 +34,8 @@ class AdaptiveProfileController(
         repository.setActive(profileId)
 
     suspend fun teach(
-        feedback: AdaptiveFeedback
+        feedback: AdaptiveFeedback,
+        modelId: String
     ): Result<AdaptiveAudioProfile> {
         val active = activeProfile.value
             ?: return Result.failure(
@@ -43,7 +44,8 @@ class AdaptiveProfileController(
 
         return repository.applyFeedback(
             profileId = active.id,
-            feedback = feedback
+            feedback = feedback,
+            modelId = modelId
         )
     }
 }
