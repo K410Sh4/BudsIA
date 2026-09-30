@@ -1,9 +1,11 @@
 package com.k410sh4.budsia.core.ai.enhancement
 
 import com.k2fsa.sherpa.onnx.OfflineSpeechDenoiserDpdfNetModelConfig
+import com.k2fsa.sherpa.onnx.OfflineSpeechDenoiserGtcrnModelConfig
 import com.k2fsa.sherpa.onnx.OfflineSpeechDenoiserModelConfig
 import com.k2fsa.sherpa.onnx.OnlineSpeechDenoiser
 import com.k2fsa.sherpa.onnx.OnlineSpeechDenoiserConfig
+import com.k410sh4.budsia.core.ai.models.AiModelCatalog
 import java.io.File
 
 class SherpaStreamingNeuralEnhancer(
@@ -26,18 +28,38 @@ class SherpaStreamingNeuralEnhancer(
             "Verified neural model file is missing."
         }
 
+        val descriptor = AiModelCatalog.byId(modelId)
+            ?: error("Unknown neural model: $modelId")
+
         release()
+
+        val modelConfig = when (descriptor.family) {
+            "DPDFNet" -> OfflineSpeechDenoiserModelConfig(
+                dpdfnet = OfflineSpeechDenoiserDpdfNetModelConfig(
+                    model = modelFile.absolutePath
+                ),
+                numThreads = inferenceThreads,
+                debug = false,
+                provider = provider
+            )
+
+            "GTCRN" -> OfflineSpeechDenoiserModelConfig(
+                gtcrn = OfflineSpeechDenoiserGtcrnModelConfig(
+                    model = modelFile.absolutePath
+                ),
+                numThreads = inferenceThreads,
+                debug = false,
+                provider = provider
+            )
+
+            else -> error(
+                "Unsupported neural model family: ${descriptor.family}"
+            )
+        }
 
         val created = OnlineSpeechDenoiser(
             config = OnlineSpeechDenoiserConfig(
-                model = OfflineSpeechDenoiserModelConfig(
-                    dpdfnet = OfflineSpeechDenoiserDpdfNetModelConfig(
-                        model = modelFile.absolutePath
-                    ),
-                    numThreads = inferenceThreads,
-                    debug = false,
-                    provider = provider
-                )
+                model = modelConfig
             )
         )
 
@@ -50,6 +72,9 @@ class SherpaStreamingNeuralEnhancer(
             }
             check(frameShift > 0) {
                 "Neural runtime returned an invalid frame shift."
+            }
+            check(sampleRate == descriptor.sampleRateHz) {
+                "Model metadata sample rate $sampleRate does not match pinned catalog value ${descriptor.sampleRateHz}."
             }
 
             NeuralEnhancerCapabilities(
