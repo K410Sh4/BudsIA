@@ -4,9 +4,7 @@
 - Android project
 - Hilt
 - Compose
-- reference microphone capture
 - deterministic DSP
-- metrics
 - privacy baseline
 - unit tests
 - CI
@@ -16,58 +14,41 @@
 - C++20
 - lock-free SPSC rings
 - native processing worker
-- exclusive -> shared fallback
-- unprocessed -> voice-recognition input fallback
 - actual route IDs and sample rates
 - xrun/drop/underrun telemetry
 - RAW vs DSP comparison
 - private-route live monitor guard
-- stop capture on screen background
-- host concurrent ring-buffer test
-
-## Phase C — streaming neural enhancement — IMPLEMENTED, DEVICE VALIDATION PENDING
-- sherpa-onnx 1.13.8 runtime
-- DPDFNet2 48 kHz HR model profile
-- explicit user-triggered model download
-- exact model byte-size + SHA-256 verification
-- runtime native-library SHA verification in CI
-- bounded AI PCM transport separated from Oboe callbacks
-- complete model-frame delivery
-- measured inference latency
-- moving realtime-factor telemetry
-- automatic AI -> DSP fallback when realtime cannot be sustained
-- neural output RMS / peak / waveform telemetry
-- AI mode starts from DSP and activates only after model preparation succeeds
-- no raw-audio persistence
-- debug and release builds verified by CI
-
-### Physical-device gate before quality/performance claims
-- microphone capture on target phone
-- Galaxy Buds input/output routing
-- route-change/disconnect recovery
-- long-session thermal test
-- AI RTF under quiet / speech / noise workloads
-- output underrun test with monitoring enabled
-- subjective and objective RAW vs DSP vs AI comparison
-- confirm no audible glitches during DSP <-> AI transitions
 
 ## Phase B.1 — explicit device routing — IMPLEMENTED, DEVICE VALIDATION PENDING
 - selectable input/output devices
-- Android 12+ `setCommunicationDevice()` for Bluetooth microphone routes
-- `BLUETOOTH_CONNECT` runtime permission
-- Oboe `VoiceCommunication` preset priority for prepared communication input
-- actual opened device IDs retained as the source of truth
-- Android owns communication output when Bluetooth microphone input is active
-- communication route is cleared only when BudsIA owns it
-- Android 11 explicit Bluetooth routing fails clearly instead of using deprecated SCO APIs
+- Android 12+ communication-device routing for Bluetooth microphones
+- BLUETOOTH_CONNECT runtime permission
+- Oboe VoiceCommunication input preset for prepared communication routes
+- actual opened device IDs remain the source of truth
+- previous Android audio mode restored after session
 
-### Routing device gate
-- Galaxy Buds microphone appears in input catalog
-- selected Buds input is the native stream's actual input device
-- active route survives 15+ minute session
-- disconnect/reconnect behavior is explicit and recoverable
-- output does not accidentally fall back to phone speaker
-- sample-rate/bandwidth reported for HFP and BLE routes
+## Phase C — streaming neural enhancement — IMPLEMENTED, DEVICE VALIDATION PENDING
+- sherpa-onnx 1.13.8
+- verified DPDFNet2 48 kHz HR
+- verified GTCRN Simple 16 kHz
+- exact model size + SHA-256
+- route-rate-aware model selection
+- no hidden resampling
+- measured inference latency
+- moving realtime factor
+- automatic AI -> DSP fallback
+- neural output waveform / RMS / peak
+- debug/release CI
+
+### Physical-device gate
+- Galaxy Buds microphone is the native stream's actual input device
+- measure actual HFP/BLE microphone rate on target phone
+- confirm 16 kHz route selects GTCRN automatically
+- confirm 48 kHz route selects DPDFNet2 automatically
+- test unsupported rates fall back to DSP
+- long-session thermal/RTF test
+- output underrun test with monitoring enabled
+- RAW vs DSP vs AI listening comparison
 
 ## Phase D — adaptive profiles — NEXT
 - immutable factory model
