@@ -8,6 +8,11 @@ import com.k410sh4.budsia.core.ai.adaptation.AudioFeedback
 import com.k410sh4.budsia.core.ai.enhancement.AdaptiveControlConfig
 import com.k410sh4.budsia.core.ai.enhancement.NeuralPipelineState
 import com.k410sh4.budsia.core.ai.enhancement.StreamingAiCoordinator
+import com.k410sh4.budsia.core.ai.evaluation.AdaptiveAbChoice
+import com.k410sh4.budsia.core.ai.evaluation.AdaptiveAbEvaluationRepository
+import com.k410sh4.budsia.core.ai.evaluation.AdaptiveAbEvaluator
+import com.k410sh4.budsia.core.ai.evaluation.AdaptiveAbStats
+import com.k410sh4.budsia.core.ai.evaluation.AdaptiveAbVariant
 import com.k410sh4.budsia.core.ai.models.AiModelCatalog
 import com.k410sh4.budsia.core.ai.models.ModelInstallState
 import com.k410sh4.budsia.core.ai.models.ModelManager
@@ -42,6 +47,9 @@ class AudioFocusViewModel @Inject constructor(
     private val modelManager: ModelManager,
     private val aiCoordinator: StreamingAiCoordinator,
     private val adaptiveProfiles: AdaptiveProfileRepository,
+    private val adaptiveAbRepository:
+        AdaptiveAbEvaluationRepository,
+    private val adaptiveAbEvaluator: AdaptiveAbEvaluator,
     private val performanceMonitor: AiPerformanceMonitor,
     private val performanceGovernor: AiPerformanceGovernor,
     private val performanceSettings:
@@ -146,14 +154,54 @@ class AudioFocusViewModel @Inject constructor(
 
         viewModelScope.launch {
             adaptiveProfiles.activeProfile.collect { profile ->
-                _uiState.update {
-                    it.copy(adaptiveProfile = profile)
+                _uiState.update { current ->
+                    val stats =
+                        adaptiveAbRepository.stats.value[
+                            profile.environment
+                        ] ?: AdaptiveAbStats.empty(
+                            profile.environment
+                        )
+
+                    current.copy(
+                        adaptiveProfile = profile,
+                        adaptiveAbStats = stats,
+                        adaptiveAbAssessment =
+                            adaptiveAbEvaluator.assess(stats),
+                        adaptiveAbAuditionVariant =
+                            if (
+                                current.adaptiveControlCandidateEnabled
+                            ) {
+                                AdaptiveAbVariant.CANDIDATE
+                            } else {
+                                AdaptiveAbVariant.FACTORY
+                            },
+                        adaptiveAbFactoryAuditioned = false,
+                        adaptiveAbCandidateAuditioned = false
+                    )
                 }
                 publishAdaptiveControl(
                     enabled =
                         _uiState.value.adaptiveControlCandidateEnabled,
                     profile = profile
                 )
+            }
+        }
+
+        viewModelScope.launch {
+            adaptiveAbRepository.stats.collect { allStats ->
+                _uiState.update { current ->
+                    val environment =
+                        current.adaptiveProfile.environment
+                    val stats =
+                        allStats[environment]
+                            ?: AdaptiveAbStats.empty(environment)
+
+                    current.copy(
+                        adaptiveAbStats = stats,
+                        adaptiveAbAssessment =
+                            adaptiveAbEvaluator.assess(stats)
+                    )
+                }
             }
         }
 
@@ -363,7 +411,9 @@ class AudioFocusViewModel @Inject constructor(
                         snapshot = null,
                         canMonitorOutput = false,
                         preparedCommunicationMode = false,
-                        activeModelId = null
+                        activeModelId = null,
+                        adaptiveAbFactoryAuditioned = false,
+                        adaptiveAbCandidateAuditioned = false
                     )
 
                     if (it.pipelineState == PipelineState.ERROR) {
@@ -604,6 +654,12 @@ class AudioFocusViewModel @Inject constructor(
         _uiState.update {
             it.copy(
                 adaptiveControlCandidateEnabled = enabled,
+                adaptiveAbAuditionVariant =
+                    if (enabled) {
+                        AdaptiveAbVariant.CANDIDATE
+                    } else {
+                        AdaptiveAbVariant.FACTORY
+                    },
                 errorMessage = null
             )
         }
@@ -612,6 +668,87 @@ class AudioFocusViewModel @Inject constructor(
             enabled = enabled,
             profile = _uiState.value.adaptiveProfile
         )
+    }
+
+    fun auditionAdaptiveFactory() {
+        if (!canRunAdaptiveAbAudition()) return
+
+        setAdaptiveControlCandidateEnabled(false)
+        _uiState.update {
+            it.copy(
+                adaptiveAbAuditionVariant =
+                    AdaptiveAbVariant.FACTORY,
+                adaptiveAbFactoryAuditioned = true
+            )
+        }
+    }
+
+    fun auditionAdaptiveCandidate() {
+        if (!canRunAdaptiveAbAudition()) return
+
+        setAdaptiveControlCandidateEnabled(true)
+        _uiState.update {
+            it.copy(
+                adaptiveAbAuditionVariant =
+                    AdaptiveAbVariant.CANDIDATE,
+                adaptiveAbCandidateAuditioned = true
+            )
+        }
+    }
+
+    fun recordAdaptiveAbChoice(
+        choice: AdaptiveAbChoice
+    ) {
+        val current = _uiState.value
+
+        if (
+            current.neuralTelemetry.state !=
+                NeuralPipelineState.RUNNING ||
+            !current.adaptiveAbFactoryAuditioned ||
+            !current.adaptiveAbCandidateAuditioned
+        ) {
+            _uiState.update {
+                it.copy(
+                    errorMessage =
+                        "Ouça IA Factory e Candidato nesta rodada antes de registrar sua preferência."
+                )
+            }
+            return
+        }
+
+        val environment =
+            current.adaptiveProfile.environment
+
+        viewModelScope.launch(Dispatchers.IO) {
+            adaptiveAbRepository.record(
+                environment = environment,
+                choice = choice
+            )
+
+            _uiState.update {
+                it.copy(
+                    adaptiveAbFactoryAuditioned = false,
+                    adaptiveAbCandidateAuditioned = false,
+                    errorMessage = null
+                )
+            }
+        }
+    }
+
+    fun resetAdaptiveAbEvaluation() {
+        val environment =
+            _uiState.value.adaptiveProfile.environment
+
+        viewModelScope.launch(Dispatchers.IO) {
+            adaptiveAbRepository.reset(environment)
+            _uiState.update {
+                it.copy(
+                    adaptiveAbFactoryAuditioned = false,
+                    adaptiveAbCandidateAuditioned = false,
+                    errorMessage = null
+                )
+            }
+        }
     }
 
     fun setLowBatteryAutoFallbackEnabled(
@@ -653,6 +790,25 @@ class AudioFocusViewModel @Inject constructor(
     fun clearError() {
         _uiState.update { it.copy(errorMessage = null) }
         aiCoordinator.resetTelemetry()
+    }
+
+    private fun canRunAdaptiveAbAudition(): Boolean {
+        val state = _uiState.value
+        val available =
+            state.selectedMode == RealtimeProcessingMode.AI &&
+                state.neuralTelemetry.state ==
+                    NeuralPipelineState.RUNNING
+
+        if (!available) {
+            _uiState.update {
+                it.copy(
+                    errorMessage =
+                        "Inicie a IA local antes de comparar Factory e Candidato."
+                )
+            }
+        }
+
+        return available
     }
 
     private fun applyAdaptiveFeedback(
