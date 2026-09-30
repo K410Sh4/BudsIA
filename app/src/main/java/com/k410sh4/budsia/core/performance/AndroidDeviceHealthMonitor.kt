@@ -10,7 +10,6 @@ import android.os.PowerManager
 import android.os.SystemClock
 import android.os.health.SystemHealthManager
 import com.k410sh4.budsia.di.ApplicationScope
-import java.lang.Float.isFinite
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -98,7 +97,7 @@ class AndroidDeviceHealthMonitor(
     ): Float? = runCatching {
         powerManager
             .getThermalHeadroom(forecastSeconds)
-            .takeIf { isFinite(it) && it >= 0f }
+            .takeIf { it.isFinite() && it >= 0f }
     }.getOrNull()
 
     private fun safeCpuHeadroom(): Float? {
@@ -108,7 +107,7 @@ class AndroidDeviceHealthMonitor(
         return runCatching {
             manager.getCpuHeadroom(null)
                 .takeIf {
-                    isFinite(it) && it in 0f..100f
+                    it.isFinite() && it in 0f..100f
                 }
         }.getOrNull()
     }
