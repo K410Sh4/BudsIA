@@ -599,6 +599,14 @@ private fun RoutingCard(
                 onSelected = onOutputSelected
             )
 
+            if (bluetoothInputSelected) {
+                Text(
+                    text = "Com microfone Bluetooth, o Android controla a rota de comunicação de entrada e saída; a saída ativa real aparece abaixo.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp
+                )
+            }
+
             if (
                 bluetoothInputSelected &&
                 !hasBluetoothConnectPermission
