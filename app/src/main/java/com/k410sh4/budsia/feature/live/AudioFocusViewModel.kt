@@ -448,6 +448,8 @@ class AudioFocusViewModel @Inject constructor(
     }
 
     fun setProcessingMode(mode: RealtimeProcessingMode) {
+        if (!validationMutationAllowed()) return
+
         if (
             mode == RealtimeProcessingMode.AI &&
             _uiState.value.performanceDecision?.allowAi == false
@@ -507,6 +509,8 @@ class AudioFocusViewModel @Inject constructor(
     }
 
     fun setMonitoring(enabled: Boolean) {
+        if (!validationMutationAllowed()) return
+
         if (enabled && !_uiState.value.canMonitorOutput) {
             _uiState.update {
                 it.copy(
@@ -598,12 +602,16 @@ class AudioFocusViewModel @Inject constructor(
     fun selectEnvironment(
         environment: AcousticEnvironment
     ) {
+        if (!validationMutationAllowed()) return
+
         viewModelScope.launch(Dispatchers.IO) {
             adaptiveProfiles.selectEnvironment(environment)
         }
     }
 
     fun setPreferredStrength(value: Float) {
+        if (!validationMutationAllowed()) return
+
         viewModelScope.launch(Dispatchers.IO) {
             adaptiveProfiles.setPreferredEnhancementStrength(value)
         }
@@ -612,6 +620,8 @@ class AudioFocusViewModel @Inject constructor(
     fun setAdaptiveControlCandidateEnabled(
         enabled: Boolean
     ) {
+        if (!validationMutationAllowed()) return
+
         _uiState.update {
             it.copy(
                 adaptiveControlCandidateEnabled = enabled,
@@ -628,6 +638,8 @@ class AudioFocusViewModel @Inject constructor(
     fun setLowBatteryAutoFallbackEnabled(
         enabled: Boolean
     ) {
+        if (!validationMutationAllowed()) return
+
         viewModelScope.launch(Dispatchers.IO) {
             performanceSettings
                 .setLowBatteryAutoFallbackEnabled(enabled)
@@ -637,6 +649,8 @@ class AudioFocusViewModel @Inject constructor(
     fun setStopAiBelowBatteryPercent(
         percent: Int
     ) {
+        if (!validationMutationAllowed()) return
+
         viewModelScope.launch(Dispatchers.IO) {
             performanceSettings
                 .setStopAiBelowBatteryPercent(percent)
@@ -644,18 +658,23 @@ class AudioFocusViewModel @Inject constructor(
     }
 
     fun teachMoreFilter() {
+        if (!validationMutationAllowed()) return
         applyAdaptiveFeedback(AudioFeedback.MORE_FILTER)
     }
 
     fun teachMoreNatural() {
+        if (!validationMutationAllowed()) return
         applyAdaptiveFeedback(AudioFeedback.MORE_NATURAL)
     }
 
     fun teachGoodAsIs() {
+        if (!validationMutationAllowed()) return
         applyAdaptiveFeedback(AudioFeedback.GOOD_AS_IS)
     }
 
     fun resetAdaptiveProfile() {
+        if (!validationMutationAllowed()) return
+
         viewModelScope.launch(Dispatchers.IO) {
             adaptiveProfiles.resetActiveProfile()
         }
@@ -908,6 +927,18 @@ class AudioFocusViewModel @Inject constructor(
                     profile.environment.displayName
             )
         )
+    }
+
+    private fun validationMutationAllowed(): Boolean {
+        if (!_uiState.value.validation.running) return true
+
+        _uiState.update {
+            it.copy(
+                errorMessage =
+                    "Cancele o Device Validation Lab antes de alterar processamento, perfil ou política."
+            )
+        }
+        return false
     }
 
     private fun routeSelectionAllowed(): Boolean {
