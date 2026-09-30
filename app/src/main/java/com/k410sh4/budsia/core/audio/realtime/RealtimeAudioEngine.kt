@@ -69,7 +69,8 @@ data class RealtimeAudioSnapshot(
     val aiEnhancedSamples: Long,
     val rawMetrics: AudioSignalMetrics,
     val processedMetrics: AudioSignalMetrics,
-    val waveform: List<Float>
+    val waveform: List<Float>,
+    val spectrum: List<Float>
 ) {
     val lastProcessorMs: Double
         get() = lastProcessorNanos / 1_000_000.0
