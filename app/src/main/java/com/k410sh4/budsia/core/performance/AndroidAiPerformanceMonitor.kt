@@ -37,6 +37,9 @@ class AndroidAiPerformanceMonitor @Inject constructor(
             null
         }
 
+    private val sampleIntervalMs: Long =
+        resolveSampleIntervalMs()
+
     private val _snapshot = MutableStateFlow(DevicePerformanceSnapshot())
     override val snapshot: StateFlow<DevicePerformanceSnapshot> =
         _snapshot.asStateFlow()
@@ -48,7 +51,7 @@ class AndroidAiPerformanceMonitor @Inject constructor(
         applicationScope.launch {
             while (isActive) {
                 _snapshot.value = sample()
-                delay(SAMPLE_INTERVAL_MS)
+                delay(sampleIntervalMs)
             }
         }
     }
@@ -223,6 +226,25 @@ class AndroidAiPerformanceMonitor @Inject constructor(
             )
         }
 
+    private fun resolveSampleIntervalMs(): Long {
+        if (Build.VERSION.SDK_INT < 36) {
+            return BASE_SAMPLE_INTERVAL_MS
+        }
+
+        val manager = systemHealthManager
+            ?: return BASE_SAMPLE_INTERVAL_MS
+
+        val cpuMinimum = runCatching {
+            manager.getCpuHeadroomMinIntervalMillis()
+        }.getOrNull()
+            ?: return BASE_SAMPLE_INTERVAL_MS
+
+        return maxOf(
+            BASE_SAMPLE_INTERVAL_MS,
+            cpuMinimum.coerceAtLeast(0L)
+        )
+    }
+
     private fun mapThermalLevel(
         status: Int
     ): ThermalLevel = when (status) {
@@ -240,6 +262,6 @@ class AndroidAiPerformanceMonitor @Inject constructor(
         // Thermal headroom should not be aggressively polled. Two seconds
         // keeps this outside latency-critical audio work and above Android's
         // documented no-benefit sub-second polling range.
-        private const val SAMPLE_INTERVAL_MS = 2_000L
+        private const val BASE_SAMPLE_INTERVAL_MS = 2_000L
     }
 }
