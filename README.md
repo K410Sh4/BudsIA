@@ -54,6 +54,10 @@ callback.
 - process CPU load explicitly labeled ESTIMATED
 - mandatory AI -> DSP fallback on severe thermal / Android low-memory
 - optional user-configured low-battery AI fallback, OFF by default
+- 30-second in-app Device Validation Lab using telemetry only
+- PASS / WARN / FAIL / UNKNOWN technical checks
+- predictive thermal/CPU headroom captured without duplicating governor policy
+- validation configuration freeze so A/B evidence is not contaminated mid-run
 
 ## Sample-rate-aware AI
 
@@ -108,6 +112,22 @@ its threshold is configurable from 5% to 30%.
 MAX_QUALITY / BALANCED / ECO are recommendations only; BudsIA does not claim that a different
 model is active unless the route and model are actually compatible.
 
+## Device Validation Lab
+
+With the audio pipeline already running, BudsIA can collect a 30-second technical sample and
+evaluate engine continuity, processing-mode stability, route rate, drops, underruns, XRuns,
+thermal state, AI governor decisions, neural model/rate compatibility and realtime factor.
+
+The lab also records Android predictive thermal headroom, CPU headroom, power-save state and
+whether the adaptive candidate was active. These are shown as telemetry; fallback policy
+remains owned by the AI performance governor.
+
+The lab stores no microphone PCM or conversation content. While it runs, configuration changes
+that would invalidate the sample window are blocked until the test finishes or is cancelled.
+
+A PASS is **not** an acoustic-quality claim. RAW/DSP/AI and factory/candidate listening tests
+still need to be run on the physical phone and Galaxy Buds.
+
 ## Validation status
 
 CI verifies code, model hashes/sizes, native runtime packaging, unit tests, debug APK and
@@ -130,4 +150,5 @@ device-specific latency remain device-validation pending.
 - `docs/ADAPTIVE_CONTROL_CANDIDATE.md`
 - `docs/AI_PERFORMANCE.md`
 - `docs/adr/0006-ai-performance-governor.md`
+- `docs/adr/0007-device-validation-lab.md`
 - `docs/adr/0005-candidate-adaptive-control.md`
