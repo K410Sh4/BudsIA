@@ -18,6 +18,17 @@ internal class NativeAudioBridge {
     external fun nativeStop(handle: Long)
     external fun nativeSetMonitoring(handle: Long, enabled: Boolean): Int
     external fun nativeSetProcessingMode(handle: Long, processingMode: Int)
+    external fun nativeReadAiInput(
+        handle: Long,
+        destination: FloatArray,
+        requestedCount: Int
+    ): Int
+    external fun nativeWriteAiOutput(
+        handle: Long,
+        source: FloatArray,
+        requestedCount: Int
+    ): Int
+    external fun nativeClearAiTransport(handle: Long)
     external fun nativeGetStats(handle: Long): LongArray
     external fun nativeGetSignalMetrics(handle: Long): FloatArray
     external fun nativeGetWaveform(handle: Long): FloatArray
