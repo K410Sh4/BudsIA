@@ -13,7 +13,7 @@ interface AdaptiveProfileRepository {
         feedback: AudioFeedback
     ): AdaptiveAudioProfile
 
-    suspend fun setEnhancementMix(
+    suspend fun setPreferredEnhancementStrength(
         value: Float
     ): AdaptiveAudioProfile
 
