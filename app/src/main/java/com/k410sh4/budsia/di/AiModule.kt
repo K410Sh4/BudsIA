@@ -8,6 +8,7 @@ import com.k410sh4.budsia.core.ai.models.ModelManager
 import com.k410sh4.budsia.core.ai.models.VerifiedModelManager
 import com.k410sh4.budsia.core.audio.realtime.RealtimeAiTransport
 import com.k410sh4.budsia.core.audio.realtime.RealtimeAudioEngine
+import com.k410sh4.budsia.core.diagnostics.MonotonicClock
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -39,11 +40,13 @@ object AiModule {
         modelManager: ModelManager,
         enhancer: StreamingNeuralEnhancer,
         audioEngine: RealtimeAudioEngine,
-        transport: RealtimeAiTransport
+        transport: RealtimeAiTransport,
+        clock: MonotonicClock
     ): StreamingAiCoordinator = StreamingAiCoordinator(
         modelManager = modelManager,
         enhancer = enhancer,
         audioEngine = audioEngine,
-        transport = transport
+        transport = transport,
+        clock = clock
     )
 }
