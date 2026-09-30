@@ -20,11 +20,14 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,8 +36,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.k410sh4.budsia.core.audio.model.PipelineState
+import com.k410sh4.budsia.core.audio.realtime.RealtimeProcessingMode
 import java.util.Locale
 
 @Composable
@@ -43,14 +50,29 @@ fun AudioFocusRoute(
     onRequestMicrophonePermission: () -> Unit,
     viewModel: AudioFocusViewModel = viewModel()
 ) {
-    val state by viewModel.uiState.collectAsState()
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+
+    DisposableEffect(lifecycle) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) {
+                viewModel.stop()
+            }
+        }
+        lifecycle.addObserver(observer)
+        onDispose {
+            lifecycle.removeObserver(observer)
+        }
+    }
 
     AudioFocusScreen(
         state = state,
         hasMicrophonePermission = hasMicrophonePermission,
         onRequestMicrophonePermission = onRequestMicrophonePermission,
         onStart = viewModel::start,
-        onStop = viewModel::stop
+        onStop = viewModel::stop,
+        onModeSelected = viewModel::setProcessingMode,
+        onMonitoringChanged = viewModel::setMonitoring
     )
 }
 
@@ -60,34 +82,60 @@ private fun AudioFocusScreen(
     hasMicrophonePermission: Boolean,
     onRequestMicrophonePermission: () -> Unit,
     onStart: () -> Unit,
-    onStop: () -> Unit
+    onStop: () -> Unit,
+    onModeSelected: (RealtimeProcessingMode) -> Unit,
+    onMonitoringChanged: (Boolean) -> Unit
 ) {
     val active = state.pipelineState == PipelineState.LISTENING ||
         state.pipelineState == PipelineState.STARTING
+
+    val snapshot = state.snapshot
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
             .padding(horizontal = 20.dp, vertical = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         Text(
             text = "ADAPTIVE AUDIO FOCUS",
             style = MaterialTheme.typography.titleLarge
         )
         Text(
-            text = if (active) "● MICROFONE ATIVO" else "IA LOCAL • FUNDAÇÃO V3",
-            color = if (active) Color(0xFF65F0A9) else MaterialTheme.colorScheme.onSurfaceVariant,
+            text = if (active) {
+                "● MICROFONE ATIVO • NATIVE OBOE"
+            } else {
+                "NATIVE AUDIO CORE • LOCAL"
+            },
+            color = if (active) Color(0xFF65F0A9)
+            else MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.labelLarge
         )
 
         WaveformCard(
-            waveform = state.snapshot?.waveform ?: List(72) { 0f },
+            waveform = snapshot?.waveform ?: List(72) { 0f },
             active = active
         )
 
-        val snapshot = state.snapshot
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            FilterChip(
+                selected = state.selectedMode == RealtimeProcessingMode.RAW,
+                onClick = { onModeSelected(RealtimeProcessingMode.RAW) },
+                label = { Text("ORIGINAL") }
+            )
+            FilterChip(
+                selected = state.selectedMode == RealtimeProcessingMode.DSP,
+                onClick = { onModeSelected(RealtimeProcessingMode.DSP) },
+                label = { Text("DSP") }
+            )
+        }
+
+        DiagnosticsCard(state)
+
         Card(
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surface
@@ -99,42 +147,45 @@ private fun AudioFocusScreen(
                 modifier = Modifier.padding(18.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                MetricRow("Modo", snapshot?.mode?.name ?: "IDLE")
-                MetricRow("Engine", snapshot?.enhancementEngineId ?: "—")
-                MetricRow(
-                    "RMS",
-                    snapshot?.processedMetrics?.rms?.let { "%.4f".format(Locale.US, it) } ?: "—"
+                Text(
+                    text = "ROTEAMENTO",
+                    style = MaterialTheme.typography.labelLarge
                 )
-                MetricRow(
-                    "Peak",
-                    snapshot?.processedMetrics?.peak?.let { "%.4f".format(Locale.US, it) } ?: "—"
-                )
-                MetricRow(
-                    "Clipping",
-                    snapshot?.processedMetrics?.clippingRatio
-                        ?.let { "%.2f %%".format(Locale.US, it * 100f) } ?: "—"
-                )
-                MetricRow(
-                    "Processamento",
-                    snapshot?.latencies
-                        ?.firstOrNull { it.name == "TOTAL_PROCESSING" }
-                        ?.let { "%.2f ms".format(Locale.US, it.durationMs) } ?: "—"
-                )
-            }
-        }
+                MetricRow("Entrada", state.inputRouteLabel)
+                MetricRow("Saída", state.outputRouteLabel)
+                HorizontalDivider()
 
-        if (snapshot?.enhancementApplied == false) {
-            Text(
-                text = "DSP ativo. O motor neural ainda não está instalado nesta fundação.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodyMedium
-            )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Monitorar áudio processado")
+                        Text(
+                            text = if (state.canMonitorOutput) {
+                                "Disponível para saída privada detectada."
+                            } else {
+                                "Bloqueado para evitar feedback acústico ou rota incompatível."
+                            },
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 12.sp
+                        )
+                    }
+                    Switch(
+                        checked = snapshot?.monitoringEnabled == true,
+                        onCheckedChange = onMonitoringChanged,
+                        enabled = active && (state.canMonitorOutput || snapshot?.monitoringEnabled == true)
+                    )
+                }
+            }
         }
 
         state.errorMessage?.let {
             Text(
                 text = "Erro: $it",
-                color = MaterialTheme.colorScheme.error
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodyMedium
             )
         }
 
@@ -154,7 +205,11 @@ private fun AudioFocusScreen(
                 onClick = if (active) onStop else onStart,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = if (active) Color(0xFF5A1E28) else MaterialTheme.colorScheme.primary
+                    containerColor = if (active) {
+                        Color(0xFF5A1E28)
+                    } else {
+                        MaterialTheme.colorScheme.primary
+                    }
                 )
             ) {
                 Icon(
@@ -162,17 +217,87 @@ private fun AudioFocusScreen(
                     contentDescription = null
                 )
                 Spacer(modifier = Modifier.size(8.dp))
-                Text(if (active) "PARAR" else "INICIAR ANÁLISE")
+                Text(if (active) "PARAR" else "INICIAR ÁUDIO")
             }
         }
 
         Text(
-            text = "O áudio bruto não é salvo. Esta versão mede e processa apenas em memória.",
+            text = "O áudio bruto não é salvo. Ao sair da tela, a captura é encerrada.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 12.sp
         )
     }
 }
+
+@Composable
+private fun DiagnosticsCard(state: AudioFocusUiState) {
+    val snapshot = state.snapshot
+
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        shape = RoundedCornerShape(22.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "DIAGNÓSTICO REALTIME",
+                style = MaterialTheme.typography.labelLarge
+            )
+            MetricRow(
+                "Input",
+                snapshot?.inputSampleRateHz
+                    ?.takeIf { it > 0 }
+                    ?.let { "$it Hz • ${snapshot.inputSharingMode.name}" }
+                    ?: "—"
+            )
+            MetricRow(
+                "Output",
+                snapshot?.outputSampleRateHz
+                    ?.takeIf { it > 0 }
+                    ?.let { "$it Hz • ${snapshot.outputSharingMode.name}" }
+                    ?: "—"
+            )
+            MetricRow(
+                "DSP atual",
+                snapshot?.lastProcessorMs?.let { formatMs(it) } ?: "—"
+            )
+            MetricRow(
+                "DSP máximo",
+                snapshot?.maxProcessorMs?.let { formatMs(it) } ?: "—"
+            )
+            MetricRow(
+                "Input xruns",
+                snapshot?.inputXruns?.toString() ?: "UNKNOWN"
+            )
+            MetricRow(
+                "Output xruns",
+                snapshot?.outputXruns?.toString() ?: "UNKNOWN"
+            )
+            MetricRow(
+                "Input drops",
+                snapshot?.droppedInputSamples?.toString() ?: "—"
+            )
+            MetricRow(
+                "Output underruns",
+                snapshot?.outputUnderrunSamples?.toString() ?: "—"
+            )
+            MetricRow(
+                "Clipping",
+                snapshot?.processedMetrics?.clippingRatio
+                    ?.let { "%.2f %%".format(Locale.US, it * 100f) }
+                    ?: "—"
+            )
+        }
+    }
+}
+
+private fun formatMs(value: Double): String =
+    "%.3f ms".format(Locale.US, value)
 
 @Composable
 private fun WaveformCard(
@@ -186,7 +311,7 @@ private fun WaveformCard(
         shape = RoundedCornerShape(26.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .height(190.dp)
+            .height(170.dp)
     ) {
         Box(
             modifier = Modifier
