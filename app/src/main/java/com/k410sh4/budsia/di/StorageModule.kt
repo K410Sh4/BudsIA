@@ -8,6 +8,7 @@ import com.k410sh4.budsia.core.ai.adaptation.AdaptiveProfileRepository
 import com.k410sh4.budsia.core.ai.adaptation.AdaptiveTuningEngine
 import com.k410sh4.budsia.core.time.SystemWallClock
 import com.k410sh4.budsia.core.time.WallClock
+import com.k410sh4.budsia.data.local.room.AdaptiveFeedbackDao
 import com.k410sh4.budsia.data.local.room.AdaptiveProfileDao
 import com.k410sh4.budsia.data.local.room.BudsIADatabase
 import com.k410sh4.budsia.data.repository.RoomAdaptiveProfileRepository
@@ -41,6 +42,11 @@ object StorageModule {
     ): AdaptiveProfileDao = database.adaptiveProfileDao()
 
     @Provides
+    fun provideAdaptiveFeedbackDao(
+        database: BudsIADatabase
+    ): AdaptiveFeedbackDao = database.adaptiveFeedbackDao()
+
+    @Provides
     @Singleton
     fun provideAdaptiveTuningEngine(): AdaptiveTuningEngine =
         AdaptiveTuningEngine()
@@ -64,12 +70,16 @@ object StorageModule {
     @Provides
     @Singleton
     fun provideAdaptiveProfileRepository(
-        dao: AdaptiveProfileDao,
+        database: BudsIADatabase,
+        profileDao: AdaptiveProfileDao,
+        feedbackDao: AdaptiveFeedbackDao,
         tuningEngine: AdaptiveTuningEngine,
         wallClock: WallClock
     ): AdaptiveProfileRepository =
         RoomAdaptiveProfileRepository(
-            dao = dao,
+            database = database,
+            profileDao = profileDao,
+            feedbackDao = feedbackDao,
             tuningEngine = tuningEngine,
             wallClock = wallClock
         )
