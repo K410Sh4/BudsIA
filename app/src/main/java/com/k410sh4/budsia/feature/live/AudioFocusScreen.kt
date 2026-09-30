@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -29,6 +31,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -45,6 +48,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.k410sh4.budsia.core.ai.adaptation.AcousticEnvironment
 import com.k410sh4.budsia.core.ai.enhancement.NeuralPipelineState
 import com.k410sh4.budsia.core.ai.models.ModelInstallState
 import com.k410sh4.budsia.core.audio.model.PipelineState
@@ -81,7 +85,13 @@ fun AudioFocusRoute(
         onModeSelected = viewModel::setProcessingMode,
         onMonitoringChanged = viewModel::setMonitoring,
         onInstallModel = viewModel::installAiModel,
-        onRemoveModel = viewModel::removeAiModel
+        onRemoveModel = viewModel::removeAiModel,
+        onEnvironmentSelected = viewModel::selectEnvironment,
+        onPreferredStrengthChanged = viewModel::setPreferredStrength,
+        onMoreFilter = viewModel::teachMoreFilter,
+        onMoreNatural = viewModel::teachMoreNatural,
+        onGoodAsIs = viewModel::teachGoodAsIs,
+        onResetProfile = viewModel::resetAdaptiveProfile
     )
 }
 
@@ -95,7 +105,13 @@ private fun AudioFocusScreen(
     onModeSelected: (RealtimeProcessingMode) -> Unit,
     onMonitoringChanged: (Boolean) -> Unit,
     onInstallModel: () -> Unit,
-    onRemoveModel: () -> Unit
+    onRemoveModel: () -> Unit,
+    onEnvironmentSelected: (AcousticEnvironment) -> Unit,
+    onPreferredStrengthChanged: (Float) -> Unit,
+    onMoreFilter: () -> Unit,
+    onMoreNatural: () -> Unit,
+    onGoodAsIs: () -> Unit,
+    onResetProfile: () -> Unit
 ) {
     val active = state.pipelineState == PipelineState.LISTENING ||
         state.pipelineState == PipelineState.STARTING ||
@@ -159,6 +175,16 @@ private fun AudioFocusScreen(
             state = state,
             onInstallModel = onInstallModel,
             onRemoveModel = onRemoveModel
+        )
+
+        AdaptiveProfileCard(
+            state = state,
+            onEnvironmentSelected = onEnvironmentSelected,
+            onPreferredStrengthChanged = onPreferredStrengthChanged,
+            onMoreFilter = onMoreFilter,
+            onMoreNatural = onMoreNatural,
+            onGoodAsIs = onGoodAsIs,
+            onResetProfile = onResetProfile
         )
 
         if (
@@ -375,6 +401,111 @@ private fun AiModelCard(
                     fontSize = 12.sp
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun AdaptiveProfileCard(
+    state: AudioFocusUiState,
+    onEnvironmentSelected: (AcousticEnvironment) -> Unit,
+    onPreferredStrengthChanged: (Float) -> Unit,
+    onMoreFilter: () -> Unit,
+    onMoreNatural: () -> Unit,
+    onGoodAsIs: () -> Unit,
+    onResetProfile: () -> Unit
+) {
+    val profile = state.adaptiveProfile
+
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        shape = RoundedCornerShape(22.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = "PERFIL ADAPTATIVO",
+                style = MaterialTheme.typography.labelLarge
+            )
+
+            Text(
+                text = "Aprendizado local por ambiente. Não altera os pesos do modelo neural.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp
+            )
+
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(AcousticEnvironment.entries) { environment ->
+                    FilterChip(
+                        selected = profile.environment == environment,
+                        onClick = { onEnvironmentSelected(environment) },
+                        label = { Text(environment.displayName) }
+                    )
+                }
+            }
+
+            MetricRow(
+                "Preferência",
+                "${(profile.preferredEnhancementStrength * 100f).toInt()}%"
+            )
+            MetricRow("Revisão", profile.revision.toString())
+            MetricRow("Feedbacks", profile.feedbackCount.toString())
+
+            Slider(
+                value = profile.preferredEnhancementStrength,
+                onValueChange = onPreferredStrengthChanged,
+                valueRange = 0.25f..1.0f
+            )
+
+            Text(
+                text = "Ensinar preferência",
+                style = MaterialTheme.typography.labelMedium
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = onMoreNatural,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Mais natural")
+                }
+                OutlinedButton(
+                    onClick = onMoreFilter,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Mais filtro")
+                }
+            }
+
+            Button(
+                onClick = onGoodAsIs,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Está bom assim")
+            }
+
+            OutlinedButton(
+                onClick = onResetProfile,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Restaurar perfil")
+            }
+
+            Text(
+                text = "Nesta fase a preferência é salva e versionada para orientar a personalização. A ativação automática só será promovida após avaliação A/B.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 11.sp
+            )
         }
     }
 }
