@@ -20,6 +20,25 @@ class AiPerformanceGovernorTest {
         assertEquals(AiPerformanceTier.DSP_ONLY, decision.tier)
         assertFalse(decision.allowAi)
         assertTrue(decision.forceFallback)
+        assertTrue(decision.preferPowerEfficiency)
+    }
+
+    @Test
+    fun nearSevereThermalForecastFallsBackBeforeStatusTurnsSevere() {
+        val governor = AiPerformanceGovernor()
+
+        val decision = governor.decide(
+            DevicePerformanceSnapshot(
+                thermalLevel = ThermalLevel.LIGHT,
+                thermalHeadroomForecast10s = MetricValue(
+                    0.99f,
+                    MeasurementKind.ESTIMATED
+                )
+            )
+        )
+
+        assertEquals(AiPerformanceTier.DSP_ONLY, decision.tier)
+        assertTrue(decision.forceFallback)
     }
 
     @Test
@@ -89,7 +108,7 @@ class AiPerformanceGovernorTest {
     }
 
     @Test
-    fun moderateThermalRecommendsEcoWithoutForcingFallback() {
+    fun moderateThermalRecommendsEcoAndPowerEfficiency() {
         val governor = AiPerformanceGovernor()
 
         val decision = governor.decide(
@@ -109,6 +128,51 @@ class AiPerformanceGovernorTest {
         assertEquals(AiPerformanceTier.ECO, decision.tier)
         assertTrue(decision.allowAi)
         assertFalse(decision.forceFallback)
+        assertTrue(decision.preferPowerEfficiency)
+    }
+
+    @Test
+    fun lowCpuHeadroomKeepsPerformanceSchedulingPriority() {
+        val governor = AiPerformanceGovernor()
+
+        val decision = governor.decide(
+            DevicePerformanceSnapshot(
+                thermalLevel = ThermalLevel.NONE,
+                cpuHeadroomPercent = MetricValue(
+                    5f,
+                    MeasurementKind.ESTIMATED
+                ),
+                batteryPercent = MetricValue(
+                    80,
+                    MeasurementKind.MEASURED
+                ),
+                isCharging = MetricValue(
+                    false,
+                    MeasurementKind.MEASURED
+                )
+            )
+        )
+
+        assertEquals(AiPerformanceTier.BALANCED, decision.tier)
+        assertFalse(decision.preferPowerEfficiency)
+    }
+
+    @Test
+    fun powerSaveModePrefersEfficientScheduling() {
+        val governor = AiPerformanceGovernor()
+
+        val decision = governor.decide(
+            DevicePerformanceSnapshot(
+                thermalLevel = ThermalLevel.NONE,
+                powerSaveMode = MetricValue(
+                    true,
+                    MeasurementKind.MEASURED
+                )
+            )
+        )
+
+        assertEquals(AiPerformanceTier.BALANCED, decision.tier)
+        assertTrue(decision.preferPowerEfficiency)
     }
 
     @Test
@@ -138,6 +202,7 @@ class AiPerformanceGovernorTest {
             decision.tier
         )
         assertTrue(decision.allowAi)
+        assertFalse(decision.preferPowerEfficiency)
     }
 
     @Test
