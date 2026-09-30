@@ -26,5 +26,6 @@ data class AudioFocusUiState(
     val neuralTelemetry: NeuralRuntimeTelemetry = NeuralRuntimeTelemetry(),
     val adaptiveProfile: AdaptiveAudioProfile =
         AdaptiveAudioProfile.factory(AcousticEnvironment.GENERAL),
+    val adaptiveControlCandidateEnabled: Boolean = false,
     val errorMessage: String? = null
 )

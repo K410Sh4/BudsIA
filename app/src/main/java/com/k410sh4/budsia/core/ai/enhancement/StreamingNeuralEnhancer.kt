@@ -24,6 +24,10 @@ interface StreamingNeuralEnhancer {
         modelFile: File
     ): Result<NeuralEnhancerCapabilities>
 
+    /**
+     * Implementations must treat [samples] as read-only. Candidate adaptive
+     * mixing may reuse the original input frame after inference completes.
+     */
     fun process(
         samples: FloatArray,
         sampleRateHz: Int

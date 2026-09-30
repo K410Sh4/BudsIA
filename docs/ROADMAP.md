@@ -50,7 +50,7 @@
 - output underrun test with monitoring enabled
 - RAW vs DSP vs AI listening comparison
 
-## Phase D — adaptive profiles — IMPLEMENTED AS CANDIDATE CONTROL, ACTIVATION PENDING
+## Phase D — adaptive profiles — CANDIDATE LIVE CONTROL IMPLEMENTED, DEFAULT OFF
 - immutable factory model remains unchanged
 - stable DataStore 1.2.1 persistence
 - schema-versioned local profile
@@ -63,10 +63,13 @@
 - unit-tested safety bounds
 - no raw audio persistence
 - no silent online model training
-- **not yet connected automatically to realtime enhancement**
+- deterministic wet/dry mapping implemented on the non-realtime neural worker
+- atomic profile updates while AI is running
+- explicit CANDIDATE switch, OFF by default and not auto-enabled at startup
+- instant rollback to factory 100% neural behavior by disabling candidate control
 
 ### Promotion gate for adaptive control
-- define a deterministic mapping to supported DSP/neural parameters
+- validate the implemented wet/dry mapping on physical target hardware
 - compare factory vs adaptive mapping using the same physical test material
 - no regression in speech preservation
 - no regression in AI realtime factor

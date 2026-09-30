@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.k410sh4.budsia.core.ai.adaptation.AcousticEnvironment
 import com.k410sh4.budsia.core.ai.adaptation.AdaptiveProfileRepository
 import com.k410sh4.budsia.core.ai.adaptation.AudioFeedback
+import com.k410sh4.budsia.core.ai.enhancement.AdaptiveControlConfig
 import com.k410sh4.budsia.core.ai.enhancement.NeuralPipelineState
 import com.k410sh4.budsia.core.ai.enhancement.StreamingAiCoordinator
 import com.k410sh4.budsia.core.ai.models.AiModelCatalog
@@ -111,6 +112,11 @@ class AudioFocusViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(adaptiveProfile = profile)
                 }
+                publishAdaptiveControl(
+                    enabled =
+                        _uiState.value.adaptiveControlCandidateEnabled,
+                    profile = profile
+                )
             }
         }
 
@@ -527,6 +533,22 @@ class AudioFocusViewModel @Inject constructor(
         }
     }
 
+    fun setAdaptiveControlCandidateEnabled(
+        enabled: Boolean
+    ) {
+        _uiState.update {
+            it.copy(
+                adaptiveControlCandidateEnabled = enabled,
+                errorMessage = null
+            )
+        }
+
+        publishAdaptiveControl(
+            enabled = enabled,
+            profile = _uiState.value.adaptiveProfile
+        )
+    }
+
     fun teachMoreFilter() {
         applyAdaptiveFeedback(AudioFeedback.MORE_FILTER)
     }
@@ -556,6 +578,22 @@ class AudioFocusViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             adaptiveProfiles.applyFeedback(feedback)
         }
+    }
+
+    private fun publishAdaptiveControl(
+        enabled: Boolean,
+        profile: com.k410sh4.budsia.core.ai.adaptation.AdaptiveAudioProfile
+    ) {
+        aiCoordinator.configureAdaptiveControl(
+            AdaptiveControlConfig(
+                enabled = enabled,
+                strength =
+                    profile.preferredEnhancementStrength,
+                profileRevision = profile.revision,
+                environmentLabel =
+                    profile.environment.displayName
+            )
+        )
     }
 
     private fun routeSelectionAllowed(): Boolean {

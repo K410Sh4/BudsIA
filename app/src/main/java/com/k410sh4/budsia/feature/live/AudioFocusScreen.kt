@@ -102,7 +102,9 @@ fun AudioFocusRoute(
         onMoreFilter = viewModel::teachMoreFilter,
         onMoreNatural = viewModel::teachMoreNatural,
         onGoodAsIs = viewModel::teachGoodAsIs,
-        onResetProfile = viewModel::resetAdaptiveProfile
+        onResetProfile = viewModel::resetAdaptiveProfile,
+        onAdaptiveControlCandidateChanged =
+            viewModel::setAdaptiveControlCandidateEnabled
     )
 }
 
@@ -126,7 +128,8 @@ private fun AudioFocusScreen(
     onMoreFilter: () -> Unit,
     onMoreNatural: () -> Unit,
     onGoodAsIs: () -> Unit,
-    onResetProfile: () -> Unit
+    onResetProfile: () -> Unit,
+    onAdaptiveControlCandidateChanged: (Boolean) -> Unit
 ) {
     val active = state.pipelineState == PipelineState.LISTENING ||
         state.pipelineState == PipelineState.STARTING ||
@@ -201,7 +204,9 @@ private fun AudioFocusScreen(
             onMoreFilter = onMoreFilter,
             onMoreNatural = onMoreNatural,
             onGoodAsIs = onGoodAsIs,
-            onResetProfile = onResetProfile
+            onResetProfile = onResetProfile,
+            onAdaptiveControlCandidateChanged =
+                onAdaptiveControlCandidateChanged
         )
 
         if (
@@ -480,9 +485,14 @@ private fun AdaptiveProfileCard(
     onMoreFilter: () -> Unit,
     onMoreNatural: () -> Unit,
     onGoodAsIs: () -> Unit,
-    onResetProfile: () -> Unit
+    onResetProfile: () -> Unit,
+    onAdaptiveControlCandidateChanged: (Boolean) -> Unit
 ) {
     val profile = state.adaptiveProfile
+    val hasInstalledAi = state.modelStatuses.any {
+        it.state == ModelInstallState.INSTALLED
+    }
+
     var sliderValue by remember(
         profile.environment,
         profile.revision
@@ -512,6 +522,48 @@ private fun AdaptiveProfileCard(
                 text = "Aprende apenas sua preferência por ambiente. Não altera pesos do modelo nem envia áudio para a nuvem.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement =
+                    Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Aplicar perfil ao áudio")
+                    Text(
+                        text = if (
+                            state.adaptiveControlCandidateEnabled
+                        ) {
+                            "CANDIDATO EXPERIMENTAL • reversível"
+                        } else {
+                            "Desativado por padrão"
+                        },
+                        color = if (
+                            state.adaptiveControlCandidateEnabled
+                        ) {
+                            Color(0xFFFFC857)
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        fontSize = 11.sp
+                    )
+                }
+
+                Switch(
+                    checked =
+                        state.adaptiveControlCandidateEnabled,
+                    onCheckedChange =
+                        onAdaptiveControlCandidateChanged,
+                    enabled = hasInstalledAi
+                )
+            }
+
+            Text(
+                text = "Quando ativado, o perfil controla somente a mistura ORIGINAL ⇄ IA. O modelo continua imutável e o fallback para DSP permanece disponível.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 11.sp
             )
 
             LazyRow(
@@ -597,7 +649,7 @@ private fun AdaptiveProfileCard(
             }
 
             Text(
-                text = "A preferência é persistida e versionada, mas ainda não modifica automaticamente o áudio. Ela só será promovida para controle do processamento após avaliação A/B no aparelho.",
+                text = "O controle candidato nunca é ativado sozinho ao abrir o app. A eficácia acústica ainda exige validação A/B no aparelho físico.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 11.sp
             )
@@ -669,6 +721,26 @@ private fun NeuralDiagnosticsCard(
                 ai.enhancedRms?.let {
                     "%.4f".format(Locale.US, it)
                 } ?: "—"
+            )
+            MetricRow(
+                "Controle adaptativo",
+                if (ai.adaptiveControlActive) {
+                    "CANDIDATO ATIVO"
+                } else {
+                    "FACTORY"
+                }
+            )
+            MetricRow(
+                "Ambiente",
+                ai.adaptiveEnvironmentLabel
+            )
+            MetricRow(
+                "Mix IA",
+                "${(ai.adaptiveStrength * 100f).toInt()}%"
+            )
+            MetricRow(
+                "Perfil rev.",
+                ai.adaptiveProfileRevision.toString()
             )
 
             ai.fallbackReason?.let {
