@@ -44,6 +44,10 @@ callback.
 - automatic stop when the live screen leaves foreground
 - no raw-audio persistence
 - debug/release CI and native runtime packaging verification
+- stable AndroidX DataStore 1.2.1 for local adaptive preferences
+- independent versioned profiles for Geral / Casa / Rua / Trabalho / Carro
+- bounded explicit feedback learning: Mais filtro / Mais natural / Está bom assim
+- no silent model-weight training
 
 ## Sample-rate-aware AI
 
@@ -69,6 +73,16 @@ input device and reports the device that the stream actually opened.
 When a Bluetooth microphone is used, Android owns the paired communication output route rather
 than BudsIA trying to force a simultaneous A2DP output.
 
+## Local adaptive profiles
+
+BudsIA now stores explicit listening preferences per acoustic environment in app-private
+DataStore. The tuner uses a bounded decaying step, so repeated feedback changes the preferred
+strength progressively less over time.
+
+This is intentionally a **preference-learning layer**, not hidden model retraining. The
+stored preference does not automatically change realtime audio yet. A future profile-to-audio
+mapping must pass physical A/B validation and retain a factory rollback path before activation.
+
 ## Validation status
 
 CI verifies code, model hashes/sizes, native runtime packaging, unit tests, debug APK and
@@ -84,3 +98,5 @@ device-specific latency remain device-validation pending.
 - `docs/adr/0001-native-realtime-core.md`
 - `docs/adr/0002-neural-runtime.md`
 - `docs/adr/0003-explicit-bluetooth-routing.md`
+- `docs/adr/0004-local-adaptive-profiles.md`
+- `docs/ADAPTIVE_PROFILES.md`
