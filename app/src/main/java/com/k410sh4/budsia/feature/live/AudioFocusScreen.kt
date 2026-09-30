@@ -60,6 +60,7 @@ import com.k410sh4.budsia.core.audio.realtime.RealtimeProcessingMode
 import com.k410sh4.budsia.core.audio.routing.AudioDeviceDescriptor
 import com.k410sh4.budsia.core.performance.AiPerformanceSettings
 import com.k410sh4.budsia.core.performance.MeasurementKind
+import com.k410sh4.budsia.core.validation.ValidationStatus
 import java.util.Locale
 
 @Composable
@@ -110,7 +111,9 @@ fun AudioFocusRoute(
         onLowBatteryAutoFallbackChanged =
             viewModel::setLowBatteryAutoFallbackEnabled,
         onStopAiBelowBatteryPercentChanged =
-            viewModel::setStopAiBelowBatteryPercent
+            viewModel::setStopAiBelowBatteryPercent,
+        onStartValidation = viewModel::startValidation,
+        onCancelValidation = viewModel::cancelValidation
     )
 }
 
@@ -137,7 +140,9 @@ private fun AudioFocusScreen(
     onResetProfile: () -> Unit,
     onAdaptiveControlCandidateChanged: (Boolean) -> Unit,
     onLowBatteryAutoFallbackChanged: (Boolean) -> Unit,
-    onStopAiBelowBatteryPercentChanged: (Int) -> Unit
+    onStopAiBelowBatteryPercentChanged: (Int) -> Unit,
+    onStartValidation: () -> Unit,
+    onCancelValidation: () -> Unit
 ) {
     val active = state.pipelineState == PipelineState.LISTENING ||
         state.pipelineState == PipelineState.STARTING ||
@@ -223,6 +228,12 @@ private fun AudioFocusScreen(
                 onLowBatteryAutoFallbackChanged,
             onStopAiBelowBatteryPercentChanged =
                 onStopAiBelowBatteryPercentChanged
+        )
+
+        DeviceValidationCard(
+            state = state,
+            onStart = onStartValidation,
+            onCancel = onCancelValidation
         )
 
         if (
@@ -881,6 +892,231 @@ private fun PerformanceCard(
             )
         }
     }
+}
+
+@Composable
+private fun DeviceValidationCard(
+    state: AudioFocusUiState,
+    onStart: () -> Unit,
+    onCancel: () -> Unit
+) {
+    val validation = state.validation
+    val report = validation.report
+    val canStart =
+        state.pipelineState == PipelineState.LISTENING &&
+            !validation.running &&
+            (
+                state.selectedMode != RealtimeProcessingMode.AI ||
+                    state.neuralTelemetry.state ==
+                        NeuralPipelineState.RUNNING
+                )
+
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        shape = RoundedCornerShape(22.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = "DEVICE VALIDATION LAB",
+                style = MaterialTheme.typography.labelLarge
+            )
+
+            Text(
+                text = "Teste técnico de 30 s usando somente telemetria. Nenhum áudio é salvo.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp
+            )
+
+            if (validation.running) {
+                LinearProgressIndicator(
+                    progress = {
+                        validation.progress.coerceIn(0f, 1f)
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                MetricRow(
+                    "Progresso",
+                    "${validation.elapsedSeconds}/30 s"
+                )
+                OutlinedButton(
+                    onClick = onCancel,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Cancelar teste")
+                }
+            } else {
+                Button(
+                    onClick = onStart,
+                    enabled = canStart,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Executar validação de 30 s")
+                }
+            }
+
+            validation.message?.let {
+                Text(
+                    text = it,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp
+                )
+            }
+
+            report?.let { result ->
+                HorizontalDivider()
+
+                MetricRow(
+                    "Resultado",
+                    result.overallStatus.name
+                )
+                MetricRow(
+                    "Modo testado",
+                    result.requestedMode.name
+                )
+                MetricRow(
+                    "Input",
+                    result.inputSampleRateHz?.let {
+                        "$it Hz"
+                    } ?: "UNKNOWN"
+                )
+                MetricRow(
+                    "Modelo",
+                    result.neuralModelId ?: "N/A"
+                )
+                MetricRow(
+                    "Drops input",
+                    result.inputDroppedSamplesDelta
+                        ?.toString() ?: "UNKNOWN"
+                )
+                MetricRow(
+                    "Underruns output",
+                    result.outputUnderrunSamplesDelta
+                        ?.toString() ?: "N/A"
+                )
+                MetricRow(
+                    "RTF máximo",
+                    result.maxRealtimeFactor?.let {
+                        "%.2f×".format(Locale.US, it)
+                    } ?: "N/A"
+                )
+                MetricRow(
+                    "CPU BudsIA pico",
+                    result.peakEstimatedProcessCpuPercent
+                        ?.let {
+                            "%.1f%% ESTIMATED".format(
+                                Locale.US,
+                                it
+                            )
+                        } ?: "UNKNOWN"
+                )
+                MetricRow(
+                    "Headroom térmico +10s máx.",
+                    result.maximumThermalHeadroomForecast10s
+                        ?.let {
+                            "%.2f ESTIMATED".format(
+                                Locale.US,
+                                it
+                            )
+                        } ?: "UNKNOWN"
+                )
+                MetricRow(
+                    "CPU headroom mínimo",
+                    result.minimumCpuHeadroomPercent
+                        ?.let {
+                            "%.1f%%".format(
+                                Locale.US,
+                                it
+                            )
+                        } ?: "UNKNOWN"
+                )
+                MetricRow(
+                    "Térmico máximo",
+                    result.maximumThermalLevel.name
+                )
+                MetricRow(
+                    "Economia de energia",
+                    if (result.powerSaveObserved) {
+                        "OBSERVADA"
+                    } else {
+                        "NÃO OBSERVADA"
+                    }
+                )
+                MetricRow(
+                    "Controle adaptativo",
+                    if (result.adaptiveControlObserved) {
+                        result.adaptiveStrengthRange?.let {
+                            "%.0f–%.0f%% CANDIDATO".format(
+                                Locale.US,
+                                it.start * 100f,
+                                it.endInclusive * 100f
+                            )
+                        } ?: "CANDIDATO"
+                    } else {
+                        "FACTORY"
+                    }
+                )
+
+                result.checks.forEach { check ->
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor =
+                                MaterialTheme.colorScheme.surfaceVariant
+                        ),
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(10.dp),
+                            verticalArrangement =
+                                Arrangement.spacedBy(3.dp)
+                        ) {
+                            Text(
+                                text =
+                                    "${validationSymbol(check.status)} ${check.title}",
+                                color =
+                                    validationColor(check.status),
+                                style =
+                                    MaterialTheme.typography.labelMedium
+                            )
+                            Text(
+                                text = check.detail,
+                                color =
+                                    MaterialTheme.colorScheme
+                                        .onSurfaceVariant,
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun validationColor(
+    status: ValidationStatus
+): Color = when (status) {
+    ValidationStatus.PASS -> Color(0xFF65F0A9)
+    ValidationStatus.WARN -> Color(0xFFFFC857)
+    ValidationStatus.FAIL -> MaterialTheme.colorScheme.error
+    ValidationStatus.UNKNOWN ->
+        MaterialTheme.colorScheme.onSurfaceVariant
+}
+
+private fun validationSymbol(
+    status: ValidationStatus
+): String = when (status) {
+    ValidationStatus.PASS -> "✓"
+    ValidationStatus.WARN -> "!"
+    ValidationStatus.FAIL -> "×"
+    ValidationStatus.UNKNOWN -> "?"
 }
 
 @Composable
