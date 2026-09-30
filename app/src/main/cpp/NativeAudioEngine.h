@@ -12,12 +12,14 @@
 
 #include "LockFreeSpscRingBuffer.h"
 #include "RealtimeAudioProcessor.h"
+#include "RealtimeSpectrumAnalyzer.h"
 
 namespace budsia::audio {
 
 class NativeAudioEngine {
 public:
     static constexpr std::size_t kWaveformPoints = 72;
+    static constexpr std::size_t kSpectrumPoints = RealtimeSpectrumAnalyzer::kBandCount;
     static constexpr std::size_t kSignalMetricCount = 8;
     static constexpr std::size_t kStatCount = 30;
 
@@ -54,6 +56,7 @@ public:
     [[nodiscard]] std::array<std::int64_t, kStatCount> snapshotStats() const;
     [[nodiscard]] std::array<float, kSignalMetricCount> snapshotSignalMetrics() const;
     [[nodiscard]] std::array<float, kWaveformPoints> snapshotWaveform() const;
+    [[nodiscard]] std::array<float, kSpectrumPoints> snapshotSpectrum() const;
     [[nodiscard]] std::string lastError() const;
 
 private:
@@ -108,6 +111,7 @@ private:
         float processedDcOffset = 0.0f;
         float processedClippingRatio = 0.0f;
         std::array<float, kWaveformPoints> waveform{};
+        std::array<float, kSpectrumPoints> spectrum{};
     };
 
     static constexpr std::size_t kRingCapacity = 1u << 16;
@@ -162,6 +166,8 @@ private:
     LockFreeSpscRingBuffer<float, kRingCapacity> outputRing_;
 
     HighPassProcessor highPassProcessor_;
+    RealtimeSpectrumAnalyzer workerSpectrumAnalyzer_;
+    RealtimeSpectrumAnalyzer aiSpectrumAnalyzer_;
     SignalSnapshot signalSnapshot_;
 
     std::thread processingThread_;
