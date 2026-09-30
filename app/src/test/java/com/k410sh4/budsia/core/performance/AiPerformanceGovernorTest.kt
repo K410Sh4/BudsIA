@@ -7,15 +7,10 @@ import org.junit.Test
 
 class AiPerformanceGovernorTest {
 
-    private val governor = AiPerformanceGovernor(
-        AiPerformancePolicy(
-            stopAiBelowBatteryPercent = 15,
-            ecoBelowBatteryPercent = 25
-        )
-    )
-
     @Test
     fun severeThermalForcesDspFallback() {
+        val governor = AiPerformanceGovernor()
+
         val decision = governor.decide(
             DevicePerformanceSnapshot(
                 thermalLevel = ThermalLevel.SEVERE
@@ -28,27 +23,75 @@ class AiPerformanceGovernorTest {
     }
 
     @Test
-    fun lowBatteryWithoutChargingForcesDspFallback() {
+    fun batteryStopIsDisabledByDefault() {
+        val governor = AiPerformanceGovernor()
+
         val decision = governor.decide(
-            DevicePerformanceSnapshot(
-                thermalLevel = ThermalLevel.NONE,
-                batteryPercent = MetricValue(
-                    15,
-                    MeasurementKind.MEASURED
-                ),
-                isCharging = MetricValue(
-                    false,
-                    MeasurementKind.MEASURED
-                )
+            snapshot(
+                battery = 5,
+                charging = false
+            )
+        )
+
+        assertTrue(decision.allowAi)
+        assertFalse(decision.forceFallback)
+    }
+
+    @Test
+    fun userEnabledLowBatteryLimitForcesFallback() {
+        val governor = AiPerformanceGovernor(
+            AiPerformancePolicy(
+                stopAiBelowBatteryPercent = 15,
+                ecoBelowBatteryPercent = 25
+            )
+        )
+
+        val decision = governor.decide(
+            snapshot(
+                battery = 15,
+                charging = false
             )
         )
 
         assertEquals(AiPerformanceTier.DSP_ONLY, decision.tier)
         assertFalse(decision.allowAi)
+        assertTrue(decision.forceFallback)
     }
 
     @Test
-    fun moderateThermalAllowsAiInEcoTier() {
+    fun policyCanBeUpdatedWithoutRecreatingGovernor() {
+        val governor = AiPerformanceGovernor()
+
+        assertTrue(
+            governor.decide(
+                snapshot(
+                    battery = 10,
+                    charging = false
+                )
+            ).allowAi
+        )
+
+        governor.updatePolicy(
+            AiPerformancePolicy(
+                stopAiBelowBatteryPercent = 15,
+                ecoBelowBatteryPercent = 25
+            )
+        )
+
+        assertFalse(
+            governor.decide(
+                snapshot(
+                    battery = 10,
+                    charging = false
+                )
+            ).allowAi
+        )
+    }
+
+    @Test
+    fun moderateThermalRecommendsEcoWithoutForcingFallback() {
+        val governor = AiPerformanceGovernor()
+
         val decision = governor.decide(
             DevicePerformanceSnapshot(
                 thermalLevel = ThermalLevel.MODERATE,
@@ -69,7 +112,9 @@ class AiPerformanceGovernorTest {
     }
 
     @Test
-    fun stableChargingDeviceAllowsMaxQualityTier() {
+    fun stableChargingDeviceRecommendsMaxQuality() {
+        val governor = AiPerformanceGovernor()
+
         val decision = governor.decide(
             DevicePerformanceSnapshot(
                 thermalLevel = ThermalLevel.NONE,
@@ -97,6 +142,8 @@ class AiPerformanceGovernorTest {
 
     @Test
     fun androidLowMemoryFlagHasPriority() {
+        val governor = AiPerformanceGovernor()
+
         val decision = governor.decide(
             DevicePerformanceSnapshot(
                 thermalLevel = ThermalLevel.NONE,
@@ -118,4 +165,24 @@ class AiPerformanceGovernorTest {
         assertEquals(AiPerformanceTier.DSP_ONLY, decision.tier)
         assertTrue(decision.forceFallback)
     }
+
+    private fun snapshot(
+        battery: Int,
+        charging: Boolean
+    ): DevicePerformanceSnapshot =
+        DevicePerformanceSnapshot(
+            thermalLevel = ThermalLevel.NONE,
+            batteryPercent = MetricValue(
+                battery,
+                MeasurementKind.MEASURED
+            ),
+            isCharging = MetricValue(
+                charging,
+                MeasurementKind.MEASURED
+            ),
+            lowMemory = MetricValue(
+                false,
+                MeasurementKind.MEASURED
+            )
+        )
 }
