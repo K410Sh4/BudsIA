@@ -49,6 +49,7 @@ class DeviceValidationEvaluator @Inject constructor() {
             add(thermalCheck(samples))
 
             if (requestedMode == RealtimeProcessingMode.AI) {
+                add(performancePolicyCheck(samples))
                 add(neuralStateCheck(samples))
                 add(neuralRateCheck(samples))
                 add(neuralRealtimeFactorCheck(samples))
@@ -82,6 +83,22 @@ class DeviceValidationEvaluator @Inject constructor() {
             peakEstimatedProcessCpuPercent =
                 samples.mapNotNull { it.processCpuPercent }
                     .maxOrNull(),
+            maximumThermalHeadroomForecast10s =
+                samples.mapNotNull {
+                    it.thermalHeadroomForecast10s
+                }.maxOrNull(),
+            minimumCpuHeadroomPercent =
+                samples.mapNotNull {
+                    it.cpuHeadroomPercent
+                }.minOrNull(),
+            powerSaveObserved =
+                samples.any { it.powerSaveMode == true },
+            performanceForceFallbackObserved =
+                samples.any { it.performanceForceFallback },
+            adaptiveControlObserved =
+                samples.any { it.adaptiveControlActive },
+            adaptiveStrengthRange =
+                adaptiveStrengthRange(samples),
             startBatteryPercent = first.batteryPercent,
             endBatteryPercent = last.batteryPercent,
             maximumThermalLevel =
@@ -347,6 +364,38 @@ class DeviceValidationEvaluator @Inject constructor() {
         }
     }
 
+    private fun performancePolicyCheck(
+        samples: List<DeviceValidationSample>
+    ): ValidationCheck {
+        if (samples.any { it.performanceForceFallback }) {
+            return ValidationCheck(
+                id = "performance_policy",
+                title = "Governor de performance",
+                status = ValidationStatus.FAIL,
+                detail = "O governor solicitou fallback de segurança durante o teste."
+            )
+        }
+
+        val tiers = samples.mapNotNull { it.performanceTier }
+        return if (tiers.isEmpty()) {
+            ValidationCheck(
+                id = "performance_policy",
+                title = "Governor de performance",
+                status = ValidationStatus.UNKNOWN,
+                detail = "Decisão do governor não estava disponível."
+            )
+        } else {
+            ValidationCheck(
+                id = "performance_policy",
+                title = "Governor de performance",
+                status = ValidationStatus.PASS,
+                detail = "Sem fallback forçado; tiers observados: " +
+                    tiers.distinct().joinToString { it.name } +
+                    "."
+            )
+        }
+    }
+
     private fun neuralStateCheck(
         samples: List<DeviceValidationSample>
     ): ValidationCheck {
@@ -451,6 +500,18 @@ class DeviceValidationEvaluator @Inject constructor() {
                     "×; inferência ficou mais lenta que tempo real."
             )
         }
+    }
+
+    private fun adaptiveStrengthRange(
+        samples: List<DeviceValidationSample>
+    ): ClosedFloatingPointRange<Float>? {
+        val strengths = samples
+            .filter { it.adaptiveControlActive }
+            .map { it.adaptiveStrength }
+
+        if (strengths.isEmpty()) return null
+
+        return strengths.minOrNull()!!..strengths.maxOrNull()!!
     }
 
     private fun monotonicDelta(
