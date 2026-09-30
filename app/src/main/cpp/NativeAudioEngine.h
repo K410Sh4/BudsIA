@@ -116,7 +116,11 @@ private:
         int requestedDeviceId,
         bool communicationMode
     );
-    oboe::Result openOutputStream(int requestedDeviceId);
+    oboe::Result openOutputStream(
+        int requestedDeviceId,
+        bool communicationMode,
+        int requestedSampleRate
+    );
     void closeStreams() noexcept;
     void resetRuntimeState() noexcept;
     void processingLoop();
