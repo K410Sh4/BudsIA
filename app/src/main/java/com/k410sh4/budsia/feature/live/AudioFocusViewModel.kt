@@ -19,6 +19,7 @@ import com.k410sh4.budsia.core.audio.routing.AudioRouteController
 import com.k410sh4.budsia.core.audio.routing.AudioRouteMonitor
 import com.k410sh4.budsia.core.performance.AiPerformanceGovernor
 import com.k410sh4.budsia.core.performance.AiPerformanceMonitor
+import com.k410sh4.budsia.core.performance.AiPerformanceSettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
@@ -41,7 +42,8 @@ class AudioFocusViewModel @Inject constructor(
     private val aiCoordinator: StreamingAiCoordinator,
     private val adaptiveProfiles: AdaptiveProfileRepository,
     private val performanceMonitor: AiPerformanceMonitor,
-    private val performanceGovernor: AiPerformanceGovernor
+    private val performanceGovernor: AiPerformanceGovernor,
+    private val performanceSettings: AiPerformanceSettingsRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AudioFocusUiState())
@@ -111,12 +113,30 @@ class AudioFocusViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
+            performanceSettings.settings.collect { settings ->
+                _uiState.update {
+                    it.copy(
+                        performanceSettings = settings,
+                        performanceDecision =
+                            performanceGovernor.decide(
+                                snapshot = it.performanceSnapshot,
+                                settings = settings
+                            )
+                    )
+                }
+            }
+        }
+
+        viewModelScope.launch {
             performanceMonitor.snapshot.collect { snapshot ->
                 _uiState.update {
                     it.copy(
                         performanceSnapshot = snapshot,
                         performanceDecision =
-                            performanceGovernor.decide(snapshot)
+                            performanceGovernor.decide(
+                                snapshot = snapshot,
+                                settings = it.performanceSettings
+                            )
                     )
                 }
             }
@@ -586,6 +606,24 @@ class AudioFocusViewModel @Inject constructor(
     fun resetAdaptiveProfile() {
         viewModelScope.launch(Dispatchers.IO) {
             adaptiveProfiles.resetActiveProfile()
+        }
+    }
+
+    fun setLowBatteryAutoFallbackEnabled(
+        enabled: Boolean
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            performanceSettings
+                .setLowBatteryAutoFallbackEnabled(enabled)
+        }
+    }
+
+    fun setStopAiBelowBatteryPercent(
+        percent: Int
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            performanceSettings
+                .setStopAiBelowBatteryPercent(percent)
         }
     }
 
