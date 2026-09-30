@@ -94,6 +94,8 @@ device-specific latency remain device-validation pending.
 - `docs/ARCHITECTURE.md`
 - `docs/AUDIO_PIPELINE.md`
 - `docs/ROADMAP.md`
+- `docs/NEURAL_PIPELINE.md`
+- `docs/DEVICE_VALIDATION.md`
 - `docs/TECHNOLOGY_BASELINE_2026.md`
 - `docs/adr/0001-native-realtime-core.md`
 - `docs/adr/0002-neural-runtime.md`
