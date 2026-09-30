@@ -6,7 +6,6 @@ import com.k410sh4.budsia.core.ai.models.ModelInstallState
 import com.k410sh4.budsia.core.audio.model.PipelineState
 import com.k410sh4.budsia.core.audio.realtime.RealtimeProcessingMode
 import com.k410sh4.budsia.core.audio.routing.AudioDeviceDescriptor
-import java.util.Locale
 
 enum class AudioFocusSection(val label: String) {
     LISTENING("Escuta"),
@@ -92,9 +91,11 @@ data class LabUiState(
 )
 
 data class DeveloperUiState(
-    val sessionState: AdaptiveSessionState,
+    val sessionState: AdaptiveSessionState
+) {
     val json: String
-)
+        get() = sessionState.toJson()
+}
 
 data class LayeredAudioUiState(
     val listening: ListeningUiState,
@@ -464,8 +465,7 @@ fun AudioFocusUiState.toLayeredUiState(): LayeredAudioUiState {
             summary = labSummary
         ),
         developer = DeveloperUiState(
-            sessionState = session,
-            json = session.toJson()
+            sessionState = session
         )
     )
 }
@@ -676,5 +676,3 @@ private fun StringBuilder.appendJson(value: String?): StringBuilder =
 private fun StringBuilder.appendNullable(value: Any?): StringBuilder =
     if (value == null) append("null") else append(value.toString())
 
-internal fun formatHumanPercent(value: Double?): String =
-    value?.let { "%.1f%%".format(Locale.US, it) } ?: "—"
