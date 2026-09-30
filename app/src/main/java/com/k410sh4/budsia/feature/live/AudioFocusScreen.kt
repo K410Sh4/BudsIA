@@ -45,6 +45,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.k410sh4.budsia.core.ai.adaptation.AdaptiveFeedback
 import com.k410sh4.budsia.core.ai.enhancement.NeuralPipelineState
 import com.k410sh4.budsia.core.ai.models.ModelInstallState
 import com.k410sh4.budsia.core.audio.model.PipelineState
@@ -81,7 +82,9 @@ fun AudioFocusRoute(
         onModeSelected = viewModel::setProcessingMode,
         onMonitoringChanged = viewModel::setMonitoring,
         onInstallModel = viewModel::installAiModel,
-        onRemoveModel = viewModel::removeAiModel
+        onRemoveModel = viewModel::removeAiModel,
+        onProfileSelected = viewModel::selectAdaptiveProfile,
+        onTeachAi = viewModel::teachAi
     )
 }
 
@@ -95,7 +98,9 @@ private fun AudioFocusScreen(
     onModeSelected: (RealtimeProcessingMode) -> Unit,
     onMonitoringChanged: (Boolean) -> Unit,
     onInstallModel: () -> Unit,
-    onRemoveModel: () -> Unit
+    onRemoveModel: () -> Unit,
+    onProfileSelected: (String) -> Unit,
+    onTeachAi: (AdaptiveFeedback) -> Unit
 ) {
     val active = state.pipelineState == PipelineState.LISTENING ||
         state.pipelineState == PipelineState.STARTING ||
@@ -155,6 +160,13 @@ private fun AudioFocusScreen(
             onModeSelected = onModeSelected
         )
 
+        AdaptiveLearningCard(
+            state = state,
+            aiRunning = aiRunning,
+            onProfileSelected = onProfileSelected,
+            onTeachAi = onTeachAi
+        )
+
         AiModelCard(
             state = state,
             onInstallModel = onInstallModel,
@@ -175,6 +187,23 @@ private fun AudioFocusScreen(
             active = active,
             onMonitoringChanged = onMonitoringChanged
         )
+
+        state.learningMessage?.let {
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                ),
+                shape = RoundedCornerShape(18.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = it,
+                    modifier = Modifier.padding(14.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+        }
 
         state.errorMessage?.let {
             Card(
@@ -272,6 +301,140 @@ private fun ProcessingModeSelector(
             enabled = aiEnabled,
             label = { Text("IA") }
         )
+    }
+}
+
+@Composable
+private fun AdaptiveLearningCard(
+    state: AudioFocusUiState,
+    aiRunning: Boolean,
+    onProfileSelected: (String) -> Unit,
+    onTeachAi: (AdaptiveFeedback) -> Unit
+) {
+    val active = state.activeAdaptiveProfile
+
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        shape = RoundedCornerShape(22.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = "APRENDIZADO LOCAL",
+                style = MaterialTheme.typography.labelLarge
+            )
+
+            Text(
+                text = "Cada ambiente mantém seu próprio ajuste. O modelo base não é sobrescrito.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                state.adaptiveProfiles.take(3).forEach { profile ->
+                    FilterChip(
+                        selected = profile.id == active?.id,
+                        onClick = { onProfileSelected(profile.id) },
+                        label = { Text(profile.name) }
+                    )
+                }
+            }
+
+            if (state.adaptiveProfiles.size > 3) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    state.adaptiveProfiles.drop(3).forEach { profile ->
+                        FilterChip(
+                            selected = profile.id == active?.id,
+                            onClick = { onProfileSelected(profile.id) },
+                            label = { Text(profile.name) }
+                        )
+                    }
+                }
+            }
+
+            MetricRow(
+                "Perfil ativo",
+                active?.name ?: "—"
+            )
+            MetricRow(
+                "Mistura neural",
+                active?.neuralMix
+                    ?.let { "${(it * 100f).toInt()}%" }
+                    ?: "—"
+            )
+            MetricRow(
+                "Feedbacks",
+                active?.feedbackCount?.toString() ?: "0"
+            )
+
+            HorizontalDivider()
+
+            Text(
+                text = "ENSINAR IA",
+                style = MaterialTheme.typography.labelMedium
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = { onTeachAi(AdaptiveFeedback.BETTER) },
+                    enabled = aiRunning,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Melhor")
+                }
+                OutlinedButton(
+                    onClick = { onTeachAi(AdaptiveFeedback.WORSE) },
+                    enabled = aiRunning,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Pior")
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = {
+                        onTeachAi(AdaptiveFeedback.TOO_AGGRESSIVE)
+                    },
+                    enabled = aiRunning,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Forte demais")
+                }
+                OutlinedButton(
+                    onClick = { onTeachAi(AdaptiveFeedback.TOO_WEAK) },
+                    enabled = aiRunning,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Fraco demais")
+                }
+            }
+
+            if (!aiRunning) {
+                Text(
+                    text = "Os botões de aprendizado ficam ativos somente enquanto a IA processa áudio real.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp
+                )
+            }
+        }
     }
 }
 
@@ -444,6 +607,28 @@ private fun NeuralDiagnosticsCard(
                     "%.4f".format(Locale.US, it)
                 } ?: "—"
             )
+            MetricRow(
+                "Perfil IA",
+                ai.adaptiveProfileName ?: "—"
+            )
+            MetricRow(
+                "Mistura aplicada",
+                ai.neuralMix
+                    ?.let { "${(it * 100f).toInt()}%" }
+                    ?: "—"
+            )
+            MetricRow(
+                "Blend adaptativo",
+                if (ai.adaptiveMixApplied) "ATIVO" else "BYPASS"
+            )
+
+            ai.adaptiveMixReason?.let {
+                Text(
+                    text = "Blend: $it",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp
+                )
+            }
 
             ai.fallbackReason?.let {
                 Text(
