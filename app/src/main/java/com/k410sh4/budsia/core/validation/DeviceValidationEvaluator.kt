@@ -26,9 +26,21 @@ class DeviceValidationEvaluator @Inject constructor() {
             first.inputDroppedSamples,
             last.inputDroppedSamples
         )
+        val aiInputDropsDelta = monotonicDelta(
+            first.aiInputDroppedSamples,
+            last.aiInputDroppedSamples
+        )
+        val outputOverrunsDelta = monotonicDelta(
+            first.outputOverrunSamples,
+            last.outputOverrunSamples
+        )
         val outputUnderrunsDelta = monotonicDelta(
             first.outputUnderrunSamples,
             last.outputUnderrunSamples
+        )
+        val disconnectDelta = monotonicDelta(
+            first.disconnectCount,
+            last.disconnectCount
         )
         val inputXrunsDelta = nullableMonotonicDelta(
             first.inputXruns,
@@ -44,11 +56,24 @@ class DeviceValidationEvaluator @Inject constructor() {
             add(processingModeCheck(requestedMode, samples))
             add(sampleRateCheck(samples))
             add(inputDropCheck(samples, inputDropsDelta))
+            add(routeDisconnectCheck(disconnectDelta))
+            add(
+                outputOverrunCheck(
+                    samples,
+                    outputOverrunsDelta
+                )
+            )
             add(outputUnderrunCheck(samples, outputUnderrunsDelta))
             add(xrunCheck(inputXrunsDelta, outputXrunsDelta))
             add(thermalCheck(samples))
 
             if (requestedMode == RealtimeProcessingMode.AI) {
+                add(
+                    aiInputDropCheck(
+                        samples,
+                        aiInputDropsDelta
+                    )
+                )
                 add(performancePolicyCheck(samples))
                 add(neuralStateCheck(samples))
                 add(neuralRateCheck(samples))
@@ -69,6 +94,21 @@ class DeviceValidationEvaluator @Inject constructor() {
                     .lastOrNull(),
             checks = checks,
             inputDroppedSamplesDelta = inputDropsDelta,
+            aiInputDroppedSamplesDelta =
+                if (
+                    requestedMode ==
+                        RealtimeProcessingMode.AI
+                ) {
+                    aiInputDropsDelta
+                } else {
+                    null
+                },
+            outputOverrunSamplesDelta =
+                if (samples.any { it.monitoringEnabled }) {
+                    outputOverrunsDelta
+                } else {
+                    null
+                },
             outputUnderrunSamplesDelta =
                 if (samples.any { it.monitoringEnabled }) {
                     outputUnderrunsDelta
@@ -77,6 +117,7 @@ class DeviceValidationEvaluator @Inject constructor() {
                 },
             inputXrunsDelta = inputXrunsDelta,
             outputXrunsDelta = outputXrunsDelta,
+            disconnectCountDelta = disconnectDelta,
             maxRealtimeFactor =
                 samples.mapNotNull { it.neuralRealtimeFactor }
                     .maxOrNull(),
@@ -253,6 +294,106 @@ class DeviceValidationEvaluator @Inject constructor() {
                     " samples perdidos (" +
                     formatPercent(ratio) +
                     ")."
+            )
+        }
+    }
+
+    private fun aiInputDropCheck(
+        samples: List<DeviceValidationSample>,
+        dropDelta: Long
+    ): ValidationCheck {
+        val frameDelta = monotonicDelta(
+            samples.first().inputFrames,
+            samples.last().inputFrames
+        )
+
+        if (frameDelta <= 0L) {
+            return ValidationCheck(
+                id = "ai_input_drops",
+                title = "Perdas na entrada IA",
+                status = ValidationStatus.UNKNOWN,
+                detail = "Sem frames suficientes para calcular."
+            )
+        }
+
+        val ratio =
+            dropDelta.toDouble() / frameDelta.toDouble()
+
+        return when {
+            dropDelta == 0L -> ValidationCheck(
+                id = "ai_input_drops",
+                title = "Perdas na entrada IA",
+                status = ValidationStatus.PASS,
+                detail = "0 samples perdidos antes da inferência."
+            )
+
+            ratio <= 0.001 -> ValidationCheck(
+                id = "ai_input_drops",
+                title = "Perdas na entrada IA",
+                status = ValidationStatus.WARN,
+                detail = dropDelta.toString() +
+                    " samples perdidos (" +
+                    formatPercent(ratio) +
+                    ")."
+            )
+
+            else -> ValidationCheck(
+                id = "ai_input_drops",
+                title = "Perdas na entrada IA",
+                status = ValidationStatus.FAIL,
+                detail = dropDelta.toString() +
+                    " samples perdidos (" +
+                    formatPercent(ratio) +
+                    ")."
+            )
+        }
+    }
+
+    private fun routeDisconnectCheck(
+        disconnectDelta: Long
+    ): ValidationCheck =
+        if (disconnectDelta == 0L) {
+            ValidationCheck(
+                id = "route_disconnects",
+                title = "Desconexões da rota",
+                status = ValidationStatus.PASS,
+                detail = "Nenhuma desconexão observada."
+            )
+        } else {
+            ValidationCheck(
+                id = "route_disconnects",
+                title = "Desconexões da rota",
+                status = ValidationStatus.FAIL,
+                detail = "$disconnectDelta desconexão(ões) observada(s)."
+            )
+        }
+
+    private fun outputOverrunCheck(
+        samples: List<DeviceValidationSample>,
+        overrunDelta: Long
+    ): ValidationCheck {
+        if (samples.none { it.monitoringEnabled }) {
+            return ValidationCheck(
+                id = "output_overruns",
+                title = "Overruns de saída",
+                status = ValidationStatus.UNKNOWN,
+                detail = "Monitoramento de saída não estava ativo."
+            )
+        }
+
+        return if (overrunDelta == 0L) {
+            ValidationCheck(
+                id = "output_overruns",
+                title = "Overruns de saída",
+                status = ValidationStatus.PASS,
+                detail = "0 samples descartados na saída."
+            )
+        } else {
+            ValidationCheck(
+                id = "output_overruns",
+                title = "Overruns de saída",
+                status = ValidationStatus.WARN,
+                detail = "$overrunDelta samples descartados na saída."
             )
         }
     }
