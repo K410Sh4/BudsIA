@@ -26,7 +26,8 @@ enum class StreamSharingMode {
 data class RealtimeAudioConfig(
     val inputDeviceId: Int = 0,
     val outputDeviceId: Int = 0,
-    val processingMode: RealtimeProcessingMode = RealtimeProcessingMode.DSP
+    val processingMode: RealtimeProcessingMode = RealtimeProcessingMode.DSP,
+    val communicationMode: Boolean = false
 )
 
 data class EngineCommandResult(
