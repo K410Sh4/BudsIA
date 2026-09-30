@@ -1,14 +1,13 @@
+# Remove low-value application logging from optimized releases.
 -assumenosideeffects class android.util.Log {
     public static *** v(...);
     public static *** d(...);
     public static *** i(...);
 }
 
-# BudsIA JNI entrypoints use name-based native symbols.
--keepclasseswithmembernames,includedescriptorclasses class com.k410sh4.budsia.core.audio.nativecore.** {
-    native <methods>;
-}
+# BudsIA native bridge is name-bound through static JNI exports.
+-keep class com.k410sh4.budsia.core.audio.nativecore.NativeAudioBridge { *; }
 
-# sherpa-onnx 1.13.8 JNI resolves these Kotlin ABI classes by exact package,
-# class, constructor and native method names. Keep the surface stable in release.
+# sherpa-onnx 1.13.8 JNI resolves Kotlin ABI classes, fields, constructors and
+# native methods by their exact JVM names.
 -keep class com.k2fsa.sherpa.onnx.** { *; }
