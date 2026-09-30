@@ -1,6 +1,7 @@
 package com.k410sh4.budsia.di
 
 import android.content.Context
+import com.k410sh4.budsia.core.ai.adaptation.AdaptiveBlendProcessor
 import com.k410sh4.budsia.core.ai.adaptation.AdaptiveProfileRepository
 import com.k410sh4.budsia.core.ai.adaptation.AdaptiveTuningEngine
 import com.k410sh4.budsia.core.ai.adaptation.PreferencesAdaptiveProfileRepository
@@ -20,6 +21,11 @@ object AdaptationModule {
     @Singleton
     fun provideAdaptiveTuningEngine(): AdaptiveTuningEngine =
         AdaptiveTuningEngine()
+
+    @Provides
+    @Singleton
+    fun provideAdaptiveBlendProcessor(): AdaptiveBlendProcessor =
+        AdaptiveBlendProcessor()
 
     @Provides
     @Singleton
