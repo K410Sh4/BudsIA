@@ -196,6 +196,11 @@ void NativeAudioEngine::stop() {
     aiInputRing_.clear();
     outputRing_.clear();
     highPassProcessor_.reset();
+    workerSpectrumAnalyzer_.reset();
+    {
+        std::lock_guard<std::mutex> spectrumLock(aiSpectrumMutex_);
+        aiSpectrumAnalyzer_.reset();
+    }
 
     state_.store(EngineState::Stopped, std::memory_order_release);
 }
@@ -294,6 +299,26 @@ std::size_t NativeAudioEngine::writeAiOutput(
         std::memory_order_relaxed
     );
 
+    {
+        std::lock_guard<std::mutex> spectrumLock(aiSpectrumMutex_);
+        const int sampleRate =
+            inputSampleRate_.load(std::memory_order_acquire);
+
+        if (
+            aiSpectrumAnalyzer_.push(
+                source,
+                count,
+                sampleRate
+            )
+        ) {
+            const auto spectrum =
+                aiSpectrumAnalyzer_.spectrum();
+
+            std::lock_guard<std::mutex> signalLock(signalMutex_);
+            signalSnapshot_.spectrum = spectrum;
+        }
+    }
+
     // Inference still runs when monitoring is disabled so telemetry and
     // evaluation remain valid, but audio is not queued into an unconsumed ring.
     if (!monitorEnabled_.load(std::memory_order_acquire)) {
@@ -317,6 +342,9 @@ std::size_t NativeAudioEngine::writeAiOutput(
 void NativeAudioEngine::clearAiTransport() noexcept {
     aiInputRing_.clear();
     outputRing_.clear();
+
+    std::lock_guard<std::mutex> spectrumLock(aiSpectrumMutex_);
+    aiSpectrumAnalyzer_.reset();
 }
 
 std::array<std::int64_t, NativeAudioEngine::kStatCount>
@@ -391,6 +419,12 @@ std::array<float, NativeAudioEngine::kWaveformPoints>
 NativeAudioEngine::snapshotWaveform() const {
     std::lock_guard<std::mutex> lock(signalMutex_);
     return signalSnapshot_.waveform;
+}
+
+std::array<float, NativeAudioEngine::kSpectrumPoints>
+NativeAudioEngine::snapshotSpectrum() const {
+    std::lock_guard<std::mutex> lock(signalMutex_);
+    return signalSnapshot_.spectrum;
 }
 
 std::string NativeAudioEngine::lastError() const {
@@ -540,6 +574,11 @@ void NativeAudioEngine::resetRuntimeState() noexcept {
     aiInputRing_.clear();
     outputRing_.clear();
     highPassProcessor_.reset();
+    workerSpectrumAnalyzer_.reset();
+    {
+        std::lock_guard<std::mutex> spectrumLock(aiSpectrumMutex_);
+        aiSpectrumAnalyzer_.reset();
+    }
 
     {
         std::lock_guard<std::mutex> signalLock(signalMutex_);
@@ -602,6 +641,20 @@ void NativeAudioEngine::processingLoop() {
         next.processedPeak = processedMetrics.peak;
         next.processedDcOffset = processedMetrics.dcOffset;
         next.processedClippingRatio = processedMetrics.clippingRatio;
+
+        if (mode != ProcessingMode::Ai) {
+            workerSpectrumAnalyzer_.push(
+                processed.data(),
+                processed.size(),
+                inputSampleRate_.load(std::memory_order_acquire)
+            );
+            next.spectrum =
+                workerSpectrumAnalyzer_.spectrum();
+        } else {
+            std::lock_guard<std::mutex> signalLock(signalMutex_);
+            next.spectrum =
+                signalSnapshot_.spectrum;
+        }
 
         const std::size_t bucketSize =
             std::max<std::size_t>(1, processed.size() / kWaveformPoints);
