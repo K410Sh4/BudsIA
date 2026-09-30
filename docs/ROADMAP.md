@@ -2,96 +2,97 @@
 
 ## Phase A — foundation — DONE
 - Android project
-- Hilt
-- Compose
-- reference microphone capture
-- deterministic DSP
-- metrics
+- Hilt / Compose
+- deterministic reference DSP
 - privacy baseline
-- unit tests
-- CI
+- tests and CI
 
-## Phase B — native realtime audio core — IMPLEMENTED, DEVICE VALIDATION PENDING
+## Phase B — native realtime core — DONE, DEVICE VALIDATION PENDING
 - Oboe / AAudio
 - C++20
 - lock-free SPSC rings
-- native processing worker
-- exclusive -> shared fallback
-- unprocessed -> voice-recognition input fallback
-- actual route IDs and sample rates
+- dedicated native worker
+- actual sample rates/device IDs
 - xrun/drop/underrun telemetry
-- RAW vs DSP comparison
-- private-route live monitor guard
-- stop capture on screen background
-- host concurrent ring-buffer test
+- RAW vs DSP
+- lifecycle-safe stop
 
-## Phase C — streaming neural enhancement — IMPLEMENTED, DEVICE VALIDATION PENDING
-- sherpa-onnx 1.13.8 runtime
-- DPDFNet2 48 kHz HR model profile
-- explicit user-triggered model download
-- exact model byte-size + SHA-256 verification
-- runtime native-library SHA verification in CI
-- bounded AI PCM transport separated from Oboe callbacks
-- complete model-frame delivery
-- measured inference latency
-- moving realtime-factor telemetry
-- automatic AI -> DSP fallback when realtime cannot be sustained
-- neural output RMS / peak / waveform telemetry
-- AI mode starts from DSP and activates only after model preparation succeeds
-- no raw-audio persistence
-- debug and release builds verified by CI
+## Phase B.1 — explicit device routing — DONE, DEVICE VALIDATION PENDING
+- selectable input/output routes
+- Android 12+ communication-device routing
+- Bluetooth microphone route preparation
+- actual opened route as source of truth
+- BLUETOOTH_CONNECT permission only when required
+- safe route release
+- no deprecated hidden SCO workaround
 
-### Physical-device gate before quality/performance claims
-- microphone capture on target phone
-- Galaxy Buds input/output routing
-- route-change/disconnect recovery
-- long-session thermal test
-- AI RTF under quiet / speech / noise workloads
-- output underrun test with monitoring enabled
-- subjective and objective RAW vs DSP vs AI comparison
-- confirm no audible glitches during DSP <-> AI transitions
+## Phase C — streaming neural enhancement — DONE, DEVICE VALIDATION PENDING
+- verified sherpa-onnx 1.13.8 runtime
+- DPDFNet2 48 kHz HR
+- explicit model download
+- exact model size + SHA-256 gate
+- AI transport isolated from Oboe callback
+- measured inference timing
+- moving realtime factor
+- AI -> DSP fallback
+- enhanced waveform/RMS/peak
 
-## Phase B.1 — explicit device routing — IMPLEMENTED, DEVICE VALIDATION PENDING
-- selectable input/output devices
-- Android 12+ `setCommunicationDevice()` for Bluetooth microphone routes
-- `BLUETOOTH_CONNECT` runtime permission
-- Oboe `VoiceCommunication` preset priority for prepared communication input
-- actual opened device IDs retained as the source of truth
-- Android owns communication output when Bluetooth microphone input is active
-- communication route is cleared only when BudsIA owns it
-- Android 11 explicit Bluetooth routing fails clearly instead of using deprecated SCO APIs
-
-### Routing device gate
-- Galaxy Buds microphone appears in input catalog
-- selected Buds input is the native stream's actual input device
-- active route survives 15+ minute session
-- disconnect/reconnect behavior is explicit and recoverable
-- output does not accidentally fall back to phone speaker
-- sample-rate/bandwidth reported for HFP and BLE routes
-
-## Phase D — adaptive profiles — NEXT
+## Phase D1 — adaptive self-learning profiles — DONE, DEVICE VALIDATION PENDING
+- Geral / Casa / Rua / Carro / Trabalho
+- per-profile bounded neural/raw mix
+- live profile switching
+- diminishing-step learning
+- Better / Worse / Too aggressive / Too weak feedback
+- Room 2.8.5 persistence
+- atomic feedback audit events
+- model identity on every feedback event
 - immutable factory model
-- versioned local adaptation profile
-- environment profile
-- user feedback: emphasize / keep / reduce / ignore
-- measured profile effectiveness
-- rollback to factory behavior
-- no silent online training
+- R8/JNI release protection
 
-## Phase E — local learning
-- explicit opt-in local dataset
-- candidate profile/model
+## Phase D2 — automatic acoustic scene understanding — NEXT
+- dedicated `SoundSceneClassifier` interface
+- local classifier running outside realtime callback
+- low-duty-cycle analysis windows
+- scene labels with explicit confidence / UNKNOWN
+- conservative profile suggestion
+- no silent automatic switch until device validation shows acceptable accuracy
+- candidate: sherpa-onnx audio tagging with a compact CED model
+
+## Phase E — local candidate learning
+- explicit opt-in dataset
+- candidate profile/model separate from factory
 - offline evaluation
-- measurable promote/reject gate
-- rollback support
-- dataset delete/export controls
+- regression suite
+- promote/reject gate
+- rollback and dataset delete/export controls
+
+## Phase F — performance policy
+- Android thermal status
+- memory telemetry
+- session battery drain
+- CPU baseline and optional accelerator benchmark
+- adaptive quality downgrade only from measured evidence
+
+## Physical-device gate
+
+Before performance or quality claims:
+- phone microphone capture
+- Galaxy Buds microphone discovery and selected-route verification
+- HFP/BLE sample-rate and bandwidth observation
+- disconnect/reconnect recovery
+- 15+ minute glitch/drop run
+- RAW vs DSP vs IA acoustic A/B
+- thermal and battery session benchmark
+- processed-output monitoring test without speaker feedback
 
 ## Quality gate for every phase
 
 1. unit/native tests
 2. debug build
 3. release compile
-4. no sensitive logging
-5. documented failure behavior
-6. no invented telemetry
-7. device validation before performance claims
+4. verified external runtime/model integrity
+5. no sensitive production logging
+6. documented fallback behavior
+7. no invented telemetry
+8. persistent state is migratable, never destructively reset by default
+9. physical-device validation before device-specific claims
