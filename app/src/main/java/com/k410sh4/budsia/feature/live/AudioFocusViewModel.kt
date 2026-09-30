@@ -115,6 +115,16 @@ class AudioFocusViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
+            adaptiveProfiles.runtimeControlEnabled.collect { enabled ->
+                _uiState.update {
+                    it.copy(
+                        adaptiveRuntimeControlEnabled = enabled
+                    )
+                }
+            }
+        }
+
+        viewModelScope.launch {
             aiCoordinator.telemetry.collect { telemetry ->
                 _uiState.update { current ->
                     val fellBack =
@@ -542,6 +552,14 @@ class AudioFocusViewModel @Inject constructor(
     fun resetAdaptiveProfile() {
         viewModelScope.launch(Dispatchers.IO) {
             adaptiveProfiles.resetActiveProfile()
+        }
+    }
+
+    fun setAdaptiveRuntimeControlEnabled(
+        enabled: Boolean
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            adaptiveProfiles.setRuntimeControlEnabled(enabled)
         }
     }
 
