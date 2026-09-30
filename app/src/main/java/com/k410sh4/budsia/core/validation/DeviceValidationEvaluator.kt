@@ -5,8 +5,9 @@ import com.k410sh4.budsia.core.audio.realtime.RealtimeEngineState
 import com.k410sh4.budsia.core.audio.realtime.RealtimeProcessingMode
 import com.k410sh4.budsia.core.performance.ThermalLevel
 import java.util.Locale
+import javax.inject.Inject
 
-class DeviceValidationEvaluator {
+class DeviceValidationEvaluator @Inject constructor() {
 
     fun evaluate(
         requestedMode: RealtimeProcessingMode,
