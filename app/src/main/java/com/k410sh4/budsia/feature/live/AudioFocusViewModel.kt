@@ -36,8 +36,6 @@ class AudioFocusViewModel @Inject constructor(
     private val aiCoordinator: StreamingAiCoordinator
 ) : ViewModel() {
 
-    private val modelId = AiModelCatalog.DPDFNET2_48K_HR.id
-
     private val _uiState = MutableStateFlow(AudioFocusUiState())
     val uiState: StateFlow<AudioFocusUiState> = _uiState.asStateFlow()
 
@@ -94,8 +92,12 @@ class AudioFocusViewModel @Inject constructor(
 
         viewModelScope.launch {
             modelManager.statuses.collect { statuses ->
-                _uiState.update {
-                    it.copy(modelStatus = statuses[modelId])
+                _uiState.update { current ->
+                    current.copy(
+                        modelStatuses = AiModelCatalog.all.mapNotNull {
+                            statuses[it.id]
+                        }
+                    )
                 }
             }
         }
@@ -113,6 +115,7 @@ class AudioFocusViewModel @Inject constructor(
                         } else {
                             current.selectedMode
                         },
+                        activeModelId = telemetry.modelId,
                         neuralTelemetry = telemetry,
                         errorMessage = telemetry.errorMessage
                             ?: current.errorMessage
@@ -135,13 +138,15 @@ class AudioFocusViewModel @Inject constructor(
 
         if (
             current.selectedMode == RealtimeProcessingMode.AI &&
-            current.modelStatus?.state != ModelInstallState.INSTALLED
+            current.modelStatuses.none {
+                it.state == ModelInstallState.INSTALLED
+            }
         ) {
             _uiState.update {
                 it.copy(
                     selectedMode = RealtimeProcessingMode.DSP,
                     errorMessage =
-                        "Instale e verifique o modelo neural antes de iniciar o modo IA."
+                        "Instale o pacote neural antes de iniciar o modo IA."
                 )
             }
             return
@@ -184,9 +189,6 @@ class AudioFocusViewModel @Inject constructor(
                 )
             }
 
-            // Model loading/checks can take longer than the realtime buffer.
-            // Start deterministically in DSP and switch to AI only after the
-            // verified model is fully prepared by StreamingAiCoordinator.
             val bootMode = if (initialMode == RealtimeProcessingMode.AI) {
                 RealtimeProcessingMode.DSP
             } else {
@@ -218,7 +220,7 @@ class AudioFocusViewModel @Inject constructor(
             }
 
             if (initialMode == RealtimeProcessingMode.AI) {
-                launchAiWorker()
+                launchAiWorkerForCurrentRoute()
             }
 
             try {
@@ -288,19 +290,17 @@ class AudioFocusViewModel @Inject constructor(
                 routeController.release()
 
                 _uiState.update {
+                    val base = it.copy(
+                        snapshot = null,
+                        canMonitorOutput = false,
+                        preparedCommunicationMode = false,
+                        activeModelId = null
+                    )
+
                     if (it.pipelineState == PipelineState.ERROR) {
-                        it.copy(
-                            snapshot = null,
-                            canMonitorOutput = false,
-                            preparedCommunicationMode = false
-                        )
+                        base
                     } else {
-                        it.copy(
-                            pipelineState = PipelineState.IDLE,
-                            snapshot = null,
-                            canMonitorOutput = false,
-                            preparedCommunicationMode = false
-                        )
+                        base.copy(pipelineState = PipelineState.IDLE)
                     }
                 }
                 sessionJob = null
@@ -368,17 +368,28 @@ class AudioFocusViewModel @Inject constructor(
     }
 
     fun setProcessingMode(mode: RealtimeProcessingMode) {
-        if (
-            mode == RealtimeProcessingMode.AI &&
-            _uiState.value.modelStatus?.state != ModelInstallState.INSTALLED
-        ) {
-            _uiState.update {
-                it.copy(
-                    errorMessage =
-                        "O modo IA exige o modelo DPDFNet2 verificado."
-                )
+        if (mode == RealtimeProcessingMode.AI) {
+            val snapshot = _uiState.value.snapshot
+            val compatibleInstalled = if (snapshot != null) {
+                installedModelIdForRate(snapshot.inputSampleRateHz) != null
+            } else {
+                _uiState.value.modelStatuses.any {
+                    it.state == ModelInstallState.INSTALLED
+                }
             }
-            return
+
+            if (!compatibleInstalled) {
+                _uiState.update {
+                    it.copy(
+                        errorMessage = if (snapshot != null) {
+                            "Nenhum modelo neural instalado é compatível com ${snapshot.inputSampleRateHz} Hz."
+                        } else {
+                            "Instale o pacote neural antes de usar o modo IA."
+                        }
+                    )
+                }
+                return
+            }
         }
 
         _uiState.update {
@@ -393,7 +404,7 @@ class AudioFocusViewModel @Inject constructor(
         }
 
         if (mode == RealtimeProcessingMode.AI) {
-            launchAiWorker()
+            launchAiWorkerForCurrentRoute()
         } else {
             aiJob?.cancel()
             aiJob = null
@@ -433,14 +444,25 @@ class AudioFocusViewModel @Inject constructor(
         if (modelJob?.isActive == true) return
 
         modelJob = viewModelScope.launch(Dispatchers.IO) {
-            val result = modelManager.download(modelId)
-            if (result.isFailure) {
-                _uiState.update {
-                    it.copy(
-                        errorMessage =
-                            result.exceptionOrNull()?.message
-                                ?: "Falha ao instalar o modelo neural."
-                    )
+            for (descriptor in AiModelCatalog.all) {
+                val installed = _uiState.value.modelStatuses
+                    .firstOrNull {
+                        it.descriptor.id == descriptor.id
+                    }
+                    ?.state == ModelInstallState.INSTALLED
+
+                if (installed) continue
+
+                val result = modelManager.download(descriptor.id)
+                if (result.isFailure) {
+                    _uiState.update {
+                        it.copy(
+                            errorMessage =
+                                result.exceptionOrNull()?.message
+                                    ?: "Falha ao instalar ${descriptor.displayName}."
+                        )
+                    }
+                    return@launch
                 }
             }
         }
@@ -456,14 +478,26 @@ class AudioFocusViewModel @Inject constructor(
             _uiState.update {
                 it.copy(
                     errorMessage =
-                        "Pare o modo IA antes de remover o modelo."
+                        "Pare o modo IA antes de remover os modelos."
                 )
             }
             return
         }
 
         modelJob = viewModelScope.launch(Dispatchers.IO) {
-            modelManager.remove(modelId)
+            for (descriptor in AiModelCatalog.all) {
+                val result = modelManager.remove(descriptor.id)
+                if (result.isFailure) {
+                    _uiState.update {
+                        it.copy(
+                            errorMessage =
+                                result.exceptionOrNull()?.message
+                                    ?: "Falha ao remover ${descriptor.displayName}."
+                        )
+                    }
+                    return@launch
+                }
+            }
         }
     }
 
@@ -489,8 +523,45 @@ class AudioFocusViewModel @Inject constructor(
         return allowed
     }
 
-    private fun launchAiWorker() {
+    private fun installedModelIdForRate(sampleRateHz: Int): String? {
+        val preferred = AiModelCatalog.bestForSampleRate(sampleRateHz)
+            ?: return null
+
+        val installed = _uiState.value.modelStatuses
+            .firstOrNull {
+                it.descriptor.id == preferred.id
+            }
+            ?.state == ModelInstallState.INSTALLED
+
+        return preferred.id.takeIf { installed }
+    }
+
+    private fun launchAiWorkerForCurrentRoute() {
         if (aiJob?.isActive == true) return
+
+        val snapshot = realtimeAudioEngine.snapshot()
+        val modelId = installedModelIdForRate(
+            snapshot.inputSampleRateHz
+        )
+
+        if (modelId == null) {
+            realtimeAudioEngine.setProcessingMode(
+                RealtimeProcessingMode.DSP
+            )
+            _uiState.update {
+                it.copy(
+                    selectedMode = RealtimeProcessingMode.DSP,
+                    activeModelId = null,
+                    errorMessage =
+                        "Sem modelo neural verificado para a rota de ${snapshot.inputSampleRateHz} Hz. O BudsIA manteve DSP."
+                )
+            }
+            return
+        }
+
+        _uiState.update {
+            it.copy(activeModelId = modelId)
+        }
 
         aiJob = viewModelScope.launch(Dispatchers.Default) {
             aiCoordinator.run(modelId)
