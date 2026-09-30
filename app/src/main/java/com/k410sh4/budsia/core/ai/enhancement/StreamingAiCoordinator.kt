@@ -9,6 +9,7 @@ import com.k410sh4.budsia.core.diagnostics.MonotonicClock
 import com.k410sh4.budsia.core.performance.AiPerformanceGovernor
 import com.k410sh4.budsia.core.performance.AiPerformanceMonitor
 import com.k410sh4.budsia.core.performance.AiPerformanceTier
+import com.k410sh4.budsia.core.performance.AiPerformanceSettingsRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -63,14 +64,16 @@ class StreamingAiCoordinator(
     private val transport: RealtimeAiTransport,
     private val clock: MonotonicClock,
     private val performanceMonitor: AiPerformanceMonitor,
-    private val performanceGovernor: AiPerformanceGovernor
+    private val performanceGovernor: AiPerformanceGovernor,
+    private val performanceSettings: AiPerformanceSettingsRepository
 ) {
     private val _telemetry = MutableStateFlow(NeuralRuntimeTelemetry())
     val telemetry: StateFlow<NeuralRuntimeTelemetry> = _telemetry.asStateFlow()
 
     suspend fun run(modelId: String) {
         val initialDecision = performanceGovernor.decide(
-            performanceMonitor.snapshot.value
+            snapshot = performanceMonitor.snapshot.value,
+            settings = performanceSettings.settings.value
         )
 
         if (!initialDecision.allowAi) {
@@ -141,7 +144,8 @@ class StreamingAiCoordinator(
             while (currentCoroutineContext().isActive) {
                 val performanceDecision =
                     performanceGovernor.decide(
-                        performanceMonitor.snapshot.value
+                        snapshot = performanceMonitor.snapshot.value,
+                        settings = performanceSettings.settings.value
                     )
 
                 if (performanceDecision.forceFallback) {
