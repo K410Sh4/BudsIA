@@ -5,8 +5,9 @@ import kotlin.math.sqrt
 /**
  * Bounded personalization layer.
  *
- * This does not mutate neural-model weights. It adapts the wet/dry neural mix
- * from explicit user feedback and keeps every change reversible/versioned.
+ * This does not mutate neural-model weights. It learns a bounded preferred
+ * enhancement strength from explicit feedback. The preference is versioned
+ * separately from live DSP so it can be evaluated before activation.
  */
 class AdaptiveTuningEngine {
 
