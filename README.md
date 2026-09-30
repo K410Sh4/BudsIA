@@ -3,16 +3,18 @@
 BudsIA V3 is a local-first adaptive audio filtering platform for Android.
 
 The project is intentionally built as replaceable, observable stages so capture, routing,
-deterministic DSP, neural enhancement and future adaptation can evolve independently.
+deterministic DSP, neural enhancement and adaptation can evolve independently.
 
 ## Current production live path
 
 ```
-Microphone
+Microphone / selected headset input
+  -> Android communication-route preparation when needed
   -> Oboe / AAudio
   -> lock-free native rings
-  -> deterministic native worker
-  -> DSP or verified streaming neural worker
+  -> deterministic DSP
+  -> sample-rate-aware neural model selection
+  -> streaming neural worker
   -> optional private-route monitor
 ```
 
@@ -25,51 +27,37 @@ callback.
 - C++20 native audio core
 - Oboe 1.10.0
 - device-native sample-rate discovery
-- exclusive-low-latency request with shared fallback
-- unprocessed-input request with voice-recognition fallback
-- SPSC lock-free input/output rings
-- dedicated native processing worker
-- RAW / DSP / AI modes
-- optional live monitor restricted to private outputs
 - selectable microphone and output routes
-- explicit Android 12+ Bluetooth communication routing via setCommunicationDevice()
-- VoiceCommunication input preset for Bluetooth headset microphones
-- actual route/device IDs surfaced to Kotlin after native stream open
-- BLUETOOTH_CONNECT runtime permission only for paired Bluetooth audio control
-- xruns when available
-- input drops / AI-input drops / output underruns / output overruns
-- measured native callback, DSP and neural inference timings
-- realtime-factor watchdog with automatic AI -> DSP fallback
+- Android 12+ Bluetooth communication routing
+- SPSC lock-free input/output rings
+- RAW / DSP / AI modes
+- actual route/device IDs surfaced after native stream open
+- xruns, drops, underruns, callback timing and processor telemetry
+- verified model lifecycle with exact byte-size + SHA-256 validation
+- sherpa-onnx 1.13.8 streaming denoiser runtime
+- DPDFNet2 48 kHz HR for full-band 48 kHz routes
+- GTCRN Simple 16 kHz for compatible 16 kHz speech/Bluetooth routes
+- automatic neural model choice from the native route's real sample rate
+- measured neural inference timing + moving realtime factor
+- automatic AI -> DSP fallback
 - explicit microphone-active indicator
 - automatic stop when the live screen leaves foreground
 - no raw-audio persistence
-- verified model lifecycle with exact byte-size + SHA-256 validation
-- sherpa-onnx 1.13.8 streaming denoiser runtime
-- DPDFNet2 48 kHz HR MAX_QUALITY model option
-- Kotlin unit tests + host C++ concurrent SPSC test
-- debug/release CI
-- CI verification that required neural native libraries are packaged
+- debug/release CI and native runtime packaging verification
 
-## Neural enhancement
+## Sample-rate-aware AI
 
-The current AI path is real, local and explicitly gated.
+The app does not force every route into one model.
 
-The app starts the audio engine in deterministic DSP while the neural model is prepared and
-verified. Only after the model runtime reports a valid frame size and matching sample rate
-does the coordinator switch the live engine to AI mode. This prevents stale microphone
-backlog from accumulating while the model loads.
+After the native stream opens, BudsIA reads the actual input sample rate and selects the best
+verified local model with an exact rate match:
 
-Current neural baseline:
+- **48,000 Hz:** DPDFNet2 48 kHz HR / MAX_QUALITY
+- **16,000 Hz:** GTCRN Simple / ECO
+- other rates: deterministic DSP fallback until a verified compatible model or measured
+  resampler path is added
 
-- runtime: sherpa-onnx 1.13.8
-- model: DPDFNet2 48 kHz HR
-- provider: CPU baseline
-- model integrity: pinned size + SHA-256
-- automatic fallback: AI -> DSP
-- realtime watchdog: moving RTF > 1.10 after warmup triggers fallback
-
-The app does **not** claim device-specific latency or quality until physical-device validation
-has been completed.
+This avoids pretending that a 48 kHz model can directly process a 16 kHz Bluetooth microphone.
 
 ## Bluetooth routing
 
@@ -79,13 +67,13 @@ on Android 12+, it prepares Android's communication route, then opens Oboe using
 input device and reports the device that the stream actually opened.
 
 When a Bluetooth microphone is used, Android owns the paired communication output route rather
-than BudsIA trying to force a simultaneous A2DP output. Route behavior is still marked for
-physical Galaxy Buds validation.
+than BudsIA trying to force a simultaneous A2DP output.
 
-## Next phase
+## Validation status
 
-Adaptive profiles will add versioned local preferences and environment-specific behavior
-without modifying the immutable factory model.
+CI verifies code, model hashes/sizes, native runtime packaging, unit tests, debug APK and
+release compilation. Physical Galaxy Buds routing, acoustic quality, thermal behavior and
+device-specific latency remain device-validation pending.
 
 ## Documentation
 
