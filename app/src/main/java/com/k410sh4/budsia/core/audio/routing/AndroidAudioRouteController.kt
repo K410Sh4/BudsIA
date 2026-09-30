@@ -107,7 +107,10 @@ class AndroidAudioRouteController(
         return PreparedAudioRoute(
             success = true,
             inputDeviceId = inputDeviceId,
-            outputDeviceId = outputDeviceId,
+            // Android communication routing owns the paired input/output path.
+            // Leaving Oboe output on the system route avoids fighting the HFP/
+            // BLE communication device with a simultaneous A2DP preference.
+            outputDeviceId = 0,
             communicationMode = true,
             communicationDeviceId = communicationDevice.id
         )
