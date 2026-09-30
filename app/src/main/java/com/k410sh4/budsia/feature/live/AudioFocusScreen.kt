@@ -214,6 +214,7 @@ private fun AudioFocusScreen(
             state.selectedMode == RealtimeProcessingMode.AI
         ) {
             NeuralDiagnosticsCard(state)
+            AiPerformanceCard(state)
         }
 
         RealtimeDiagnosticsCard(state)
@@ -746,6 +747,121 @@ private fun NeuralDiagnosticsCard(
                 Text(
                     text = "Fallback para DSP: $it",
                     color = MaterialTheme.colorScheme.error,
+                    fontSize = 12.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AiPerformanceCard(
+    state: AudioFocusUiState
+) {
+    val ai = state.neuralTelemetry
+
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        shape = RoundedCornerShape(22.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "AI PERFORMANCE • ADPF",
+                style = MaterialTheme.typography.labelLarge
+            )
+
+            MetricRow(
+                "Perfil",
+                ai.performanceLevel.name
+            )
+            MetricRow(
+                "Performance Hint",
+                if (ai.performanceHintSupported) {
+                    "ATIVO"
+                } else {
+                    "NÃO SUPORTADO"
+                }
+            )
+            MetricRow(
+                "Eficiência energética",
+                if (ai.preferPowerEfficiency) {
+                    "PRIORIZADA"
+                } else {
+                    "NORMAL"
+                }
+            )
+            MetricRow(
+                "Térmico",
+                ai.thermalSeverity.name
+            )
+            MetricRow(
+                "Headroom térmico agora",
+                ai.thermalHeadroomNow?.let {
+                    "%.2f • ESTIMADO".format(Locale.US, it)
+                } ?: "UNKNOWN"
+            )
+            MetricRow(
+                "Headroom térmico +10s",
+                ai.thermalHeadroomForecast10s?.let {
+                    "%.2f • PREVISÃO".format(Locale.US, it)
+                } ?: "UNKNOWN"
+            )
+            MetricRow(
+                "CPU headroom",
+                ai.cpuHeadroomPercent?.let {
+                    "%.1f%% • API 36".format(Locale.US, it)
+                } ?: "UNKNOWN"
+            )
+            MetricRow(
+                "Bateria",
+                ai.batteryPercent?.let {
+                    buildString {
+                        append(it)
+                        append("%")
+                        when (ai.charging) {
+                            true -> append(" • carregando")
+                            false -> append(" • bateria")
+                            null -> Unit
+                        }
+                    }
+                } ?: "UNKNOWN"
+            )
+            MetricRow(
+                "Economia de energia",
+                if (ai.powerSaveMode) "ATIVA" else "OFF"
+            )
+            MetricRow(
+                "Memória crítica",
+                if (ai.lowMemory) "SIM" else "NÃO"
+            )
+
+            ai.performanceReason?.let {
+                Text(
+                    text = it,
+                    color = if (
+                        ai.performanceLevel.name == "MAX"
+                    ) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        Color(0xFFFFC46B)
+                    },
+                    fontSize = 12.sp
+                )
+            }
+
+            if (
+                ai.performanceLevel.name == "ECO" ||
+                ai.performanceLevel.name == "DSP_ONLY"
+            ) {
+                Text(
+                    text = "Performance reduzida automaticamente para proteger estabilidade, temperatura ou recursos do dispositivo.",
+                    color = Color(0xFFFFC46B),
                     fontSize = 12.sp
                 )
             }
