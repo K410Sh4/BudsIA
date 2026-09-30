@@ -46,7 +46,9 @@ class AdaptiveAbEvaluatorTest {
         )
         assertEquals(
             7f / 9f,
-            assessment.candidatePreferenceRate,
+            requireNotNull(
+                assessment.candidatePreferenceRate
+            ),
             0.000001f
         )
     }
@@ -97,7 +99,9 @@ class AdaptiveAbEvaluatorTest {
         assertEquals(5L, stats.decisiveComparisons)
         assertEquals(
             0.6f,
-            stats.candidatePreferenceRate,
+            requireNotNull(
+                stats.candidatePreferenceRate
+            ),
             0.000001f
         )
 
