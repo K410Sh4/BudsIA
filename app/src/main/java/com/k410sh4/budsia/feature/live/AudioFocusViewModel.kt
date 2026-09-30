@@ -760,14 +760,38 @@ class AudioFocusViewModel @Inject constructor(
                             thermalLevel =
                                 current.performanceSnapshot
                                     .thermalLevel,
+                            thermalHeadroomForecast10s =
+                                current.performanceSnapshot
+                                    .thermalHeadroomForecast10s
+                                    .value,
+                            cpuHeadroomPercent =
+                                current.performanceSnapshot
+                                    .cpuHeadroomPercent
+                                    .value,
                             batteryPercent =
                                 current.performanceSnapshot
                                     .batteryPercent
                                     .value,
+                            powerSaveMode =
+                                current.performanceSnapshot
+                                    .powerSaveMode
+                                    .value,
                             processCpuPercent =
                                 current.performanceSnapshot
                                     .processCpuPercent
-                                    .value
+                                    .value,
+                            performanceTier =
+                                current.performanceDecision
+                                    ?.tier,
+                            performanceForceFallback =
+                                current.performanceDecision
+                                    ?.forceFallback == true,
+                            adaptiveControlActive =
+                                current.neuralTelemetry
+                                    .adaptiveControlActive,
+                            adaptiveStrength =
+                                current.neuralTelemetry
+                                    .adaptiveStrength
                         )
 
                         _uiState.update {
