@@ -3,6 +3,7 @@ package com.k410sh4.budsia.core.validation
 import com.k410sh4.budsia.core.ai.enhancement.NeuralPipelineState
 import com.k410sh4.budsia.core.audio.realtime.RealtimeEngineState
 import com.k410sh4.budsia.core.audio.realtime.RealtimeProcessingMode
+import com.k410sh4.budsia.core.performance.AiPerformanceTier
 import com.k410sh4.budsia.core.performance.ThermalLevel
 
 enum class ValidationStatus {
@@ -37,8 +38,15 @@ data class DeviceValidationSample(
     val neuralRequiredSampleRateHz: Int?,
     val neuralRealtimeFactor: Double?,
     val thermalLevel: ThermalLevel,
+    val thermalHeadroomForecast10s: Float?,
+    val cpuHeadroomPercent: Float?,
     val batteryPercent: Int?,
-    val processCpuPercent: Double?
+    val powerSaveMode: Boolean?,
+    val processCpuPercent: Double?,
+    val performanceTier: AiPerformanceTier?,
+    val performanceForceFallback: Boolean,
+    val adaptiveControlActive: Boolean,
+    val adaptiveStrength: Float
 )
 
 data class DeviceValidationReport(
@@ -53,6 +61,12 @@ data class DeviceValidationReport(
     val outputXrunsDelta: Long?,
     val maxRealtimeFactor: Double?,
     val peakEstimatedProcessCpuPercent: Double?,
+    val maximumThermalHeadroomForecast10s: Float?,
+    val minimumCpuHeadroomPercent: Float?,
+    val powerSaveObserved: Boolean,
+    val performanceForceFallbackObserved: Boolean,
+    val adaptiveControlObserved: Boolean,
+    val adaptiveStrengthRange: ClosedFloatingPointRange<Float>?,
     val startBatteryPercent: Int?,
     val endBatteryPercent: Int?,
     val maximumThermalLevel: ThermalLevel
