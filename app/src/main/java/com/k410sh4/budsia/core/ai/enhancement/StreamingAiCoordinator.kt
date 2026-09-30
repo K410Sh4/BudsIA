@@ -179,11 +179,13 @@ class StreamingAiCoordinator(
                     capabilities.requiredSampleRateHz.toDouble() *
                     1_000_000_000.0
 
-            hintSession = performanceHintFactory.open(
-                targetWorkDurationNanos =
-                    frameDurationNanos.toLong().coerceAtLeast(1L)
-            )
-            hintSession.setPreferPowerEfficiency(
+            val activeHintSession =
+                performanceHintFactory.open(
+                    targetWorkDurationNanos =
+                        frameDurationNanos.toLong().coerceAtLeast(1L)
+                )
+            hintSession = activeHintSession
+            activeHintSession.setPreferPowerEfficiency(
                 initialDecision.preferPowerEfficiency
             )
 
@@ -227,7 +229,7 @@ class StreamingAiCoordinator(
                     latestPerformanceDecision.preferPowerEfficiency !=
                         previousPowerEfficiency
                 ) {
-                    hintSession.setPreferPowerEfficiency(
+                    activeHintSession.setPreferPowerEfficiency(
                         latestPerformanceDecision.preferPowerEfficiency
                     )
                     previousPowerEfficiency =
@@ -270,7 +272,7 @@ class StreamingAiCoordinator(
                 val inferenceNanos =
                     clock.nowNanos() - startNanos
 
-                hintSession.reportActualWorkDuration(
+                activeHintSession.reportActualWorkDuration(
                     inferenceNanos.coerceAtLeast(1L)
                 )
 
@@ -370,7 +372,7 @@ class StreamingAiCoordinator(
                         performanceReason =
                             latestPerformanceDecision.reason,
                         performanceHintSupported =
-                            hintSession.supported,
+                            activeHintSession.supported,
                         powerEfficiencyHintActive =
                             latestPerformanceDecision
                                 .preferPowerEfficiency,
