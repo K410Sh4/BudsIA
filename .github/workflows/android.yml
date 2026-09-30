@@ -76,6 +76,14 @@ jobs:
       - name: Release compile
         run: gradle :app:assembleRelease --stacktrace
 
+      - name: Verify JNI names preserved in release
+        run: |
+          MAP=app/build/outputs/mapping/release/mapping.txt
+          test -f "$MAP"
+          grep -F "com.k2fsa.sherpa.onnx.OnlineSpeechDenoiser -> com.k2fsa.sherpa.onnx.OnlineSpeechDenoiser:" "$MAP"
+          grep -F "com.k2fsa.sherpa.onnx.DenoisedAudio -> com.k2fsa.sherpa.onnx.DenoisedAudio:" "$MAP"
+          grep -F "com.k410sh4.budsia.core.audio.nativecore.NativeAudioBridge -> com.k410sh4.budsia.core.audio.nativecore.NativeAudioBridge:" "$MAP"
+
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
