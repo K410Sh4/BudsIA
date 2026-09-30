@@ -52,6 +52,8 @@ callback.
 - estimated normalized BudsIA process CPU telemetry
 - automatic AI -> DSP fallback on severe thermal, low-memory or critical-battery conditions
 - explicit ECO / BALANCED / MAX_QUALITY recommendations without pretending they already change runtime behavior
+- in-app 30-second physical-device validation lab
+- PASS / WARN / FAIL / UNKNOWN technical checks without saving microphone audio
 
 ## Sample-rate-aware AI
 
@@ -100,6 +102,15 @@ ECO / BALANCED / MAX_QUALITY are currently recommendations only. They are intent
 used to change inference threads or providers mid-session until that behavior is measured on
 the physical target device.
 
+## Device Validation Lab
+
+While the audio pipeline is already running, BudsIA can collect 30 seconds of technical
+telemetry and evaluate realtime continuity, sample-rate stability, drops, underruns, XRuns,
+thermal pressure, neural model/rate compatibility and neural realtime factor.
+
+The report is intentionally **not** an acoustic-quality score. It does not save raw audio or
+conversation content, and AI validation can start only after the neural runtime is RUNNING.
+
 ## Validation status
 
 CI verifies code, model hashes/sizes, native runtime packaging, unit tests, debug APK and
@@ -119,4 +130,5 @@ device-specific latency remain device-validation pending.
 - `docs/adr/0003-explicit-bluetooth-routing.md`
 - `docs/adr/0004-local-adaptive-profiles.md`
 - `docs/adr/0005-ai-performance-governor.md`
+- `docs/adr/0006-device-validation-lab.md`
 - `docs/ADAPTIVE_PROFILES.md`
