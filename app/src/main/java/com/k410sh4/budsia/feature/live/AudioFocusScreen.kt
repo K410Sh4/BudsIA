@@ -55,6 +55,7 @@ import com.k410sh4.budsia.core.ai.adaptation.AcousticEnvironment
 import com.k410sh4.budsia.core.ai.adaptation.AdaptiveAudioProfile
 import com.k410sh4.budsia.core.ai.enhancement.NeuralPipelineState
 import com.k410sh4.budsia.core.ai.models.ModelInstallState
+import com.k410sh4.budsia.core.performance.AiPerformanceLevel
 import com.k410sh4.budsia.core.audio.model.PipelineState
 import com.k410sh4.budsia.core.audio.realtime.RealtimeProcessingMode
 import com.k410sh4.budsia.core.audio.routing.AudioDeviceDescriptor
@@ -845,7 +846,7 @@ private fun AiPerformanceCard(
                 Text(
                     text = it,
                     color = if (
-                        ai.performanceLevel.name == "MAX"
+                        ai.performanceLevel == AiPerformanceLevel.MAX
                     ) {
                         MaterialTheme.colorScheme.onSurfaceVariant
                     } else {
@@ -856,8 +857,8 @@ private fun AiPerformanceCard(
             }
 
             if (
-                ai.performanceLevel.name == "ECO" ||
-                ai.performanceLevel.name == "DSP_ONLY"
+                ai.performanceLevel == AiPerformanceLevel.ECO ||
+                ai.performanceLevel == AiPerformanceLevel.DSP_ONLY
             ) {
                 Text(
                     text = "Performance reduzida automaticamente para proteger estabilidade, temperatura ou recursos do dispositivo.",
