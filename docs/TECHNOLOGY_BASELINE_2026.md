@@ -7,59 +7,88 @@ This file records technology choices separately from product claims.
 Production path:
 
 - Oboe 1.10.0
-- AAudio on supported Android versions through Oboe
+- AAudio through Oboe on supported Android versions
 - C++20
 - lock-free SPSC rings
-- worker-thread DSP/inference
-- Kotlin/JNI only for control and low-frequency telemetry
+- realtime callbacks limited to bounded memory copies/counters
+- worker-thread DSP and neural inference
 
-The app never performs JNI calls for every audio frame.
+The neural bridge currently exchanges complete model chunks through JNI outside the Oboe
+callback. This is measured and isolated so it can later be replaced by a fully native
+inference bridge if device profiling shows JNI transport is material.
 
-## Neural runtime — next phase
+## Neural runtime
 
-The planned model runtime is ONNX Runtime Mobile.
+Current verified runtime:
 
-Execution providers will be selected through measured device benchmarks rather than brand
-assumptions:
+- sherpa-onnx 1.13.8
+- ONNX Runtime native libraries supplied by the pinned sherpa Android release
+- streaming OnlineSpeechDenoiser API
+- CPU provider baseline
+- DPDFNet2 48 kHz HR as the first MAX_QUALITY candidate
 
-1. Quantized model: CPU baseline first.
-2. Non-quantized model: XNNPACK baseline first.
-3. NNAPI only when measured latency/energy/quality is better on the current device/model.
+The runtime and model are integrity-pinned in CI. The user model is downloaded separately and
+verified before activation.
 
-A faster accelerator is not assumed merely because a GPU/NPU exists.
+## 2026 accelerator policy
 
-Reference:
-https://onnxruntime.ai/docs/tutorials/mobile/
+NNAPI is **not** a forward-looking default. Android deprecated NNAPI in Android 15.
+
+BudsIA therefore uses this order:
+
+1. optimized CPU baseline;
+2. XNNPACK or runtime-specific CPU acceleration when the selected model/runtime supports it;
+3. vendor-specific acceleration only behind an isolated benchmarked provider;
+4. Qualcomm QNN only on compatible Snapdragon devices if a future runtime build supports it;
+5. no accelerator is selected from device branding alone.
+
+A GPU/NPU path is promoted only if measured latency, energy and output quality are all
+acceptable on that exact model/device combination.
+
+References:
+- https://developer.android.com/ndk/guides/neuralnetworks
+- https://developer.android.com/ndk/guides/neuralnetworks/migration-guide
+- https://onnxruntime.ai/docs/tutorials/mobile/
+- https://onnxruntime.ai/docs/execution-providers/
 
 ## Model policy
 
-The first neural filter will be causal and streaming.
+Continuous audio models must be causal/streaming or explicitly bounded in algorithmic
+latency.
 
-Candidate families:
+Candidate families include:
 
-- compact convolutional/TCN recurrent mask estimator;
-- RNNoise-class lightweight baseline;
-- DeepFilterNet-inspired full-band enhancement experiments.
+- DPDFNet streaming enhancement;
+- GTCRN-class compact enhancement for ECO profiles;
+- RNNoise-class ultra-light baselines;
+- DeepFilterNet-inspired experiments where the device budget permits.
 
-A large Transformer is not the default for a continuous mobile audio callback pipeline.
+A large Transformer is not the default for a continuous low-latency mobile filter.
 
-## Model promotion
+## Adaptation policy
 
-Factory model is immutable.
+Factory model weights are immutable during live listening.
 
-Personal adaptation and candidate models are kept separately:
+Personalization layers are separated:
 
-Factory -> Adaptive Profile -> Candidate -> Evaluation -> Promote/Rollback
+```
+Factory model
+  -> versioned adaptive profile
+  -> local feedback dataset (opt-in)
+  -> candidate tuning/model
+  -> offline evaluation
+  -> promote or rollback
+```
 
-No candidate is promoted without measured regression checks.
+This prevents uncontrolled model drift.
 
 ## Measurements
 
 BudsIA distinguishes:
 
-- MEASURED: produced from a device/runtime counter or monotonic timer;
-- ESTIMATED: algorithmic estimate;
-- UNKNOWN: cannot be measured with the current route/API.
+- MEASURED: produced from runtime/device counters or monotonic timers;
+- ESTIMATED: derived from an explicit model/algorithm;
+- UNKNOWN: unavailable from the current Android/audio route.
 
 Bluetooth codec latency must never be presented as measured unless it has actually been
 measured.
