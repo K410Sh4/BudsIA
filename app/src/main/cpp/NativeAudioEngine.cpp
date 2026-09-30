@@ -68,7 +68,8 @@ NativeAudioEngine::~NativeAudioEngine() {
 int NativeAudioEngine::start(
     int requestedInputDeviceId,
     int requestedOutputDeviceId,
-    ProcessingMode mode
+    ProcessingMode mode,
+    bool communicationMode
 ) {
     std::lock_guard<std::mutex> lock(lifecycleMutex_);
 
@@ -88,7 +89,10 @@ int NativeAudioEngine::start(
     resetRuntimeState();
     processingMode_.store(static_cast<int>(mode), std::memory_order_release);
 
-    const auto inputResult = openInputStream(requestedInputDeviceId);
+    const auto inputResult = openInputStream(
+        requestedInputDeviceId,
+        communicationMode
+    );
     if (inputResult != oboe::Result::OK || inputStream_ == nullptr) {
         const int code = static_cast<int>(inputResult);
         setLastError(
@@ -394,15 +398,28 @@ std::string NativeAudioEngine::lastError() const {
     return lastErrorText_;
 }
 
-oboe::Result NativeAudioEngine::openInputStream(int requestedDeviceId) {
+oboe::Result NativeAudioEngine::openInputStream(
+    int requestedDeviceId,
+    bool communicationMode
+) {
     const std::array<oboe::SharingMode, 2> sharingModes{
         oboe::SharingMode::Exclusive,
         oboe::SharingMode::Shared,
     };
-    const std::array<oboe::InputPreset, 2> presets{
+
+    const std::array<oboe::InputPreset, 3> communicationPresets{
+        oboe::InputPreset::VoiceCommunication,
+        oboe::InputPreset::VoiceRecognition,
+        oboe::InputPreset::Unprocessed,
+    };
+    const std::array<oboe::InputPreset, 3> normalPresets{
         oboe::InputPreset::Unprocessed,
         oboe::InputPreset::VoiceRecognition,
+        oboe::InputPreset::VoicePerformance,
     };
+
+    const auto& presets =
+        communicationMode ? communicationPresets : normalPresets;
 
     oboe::Result lastResult = oboe::Result::ErrorUnavailable;
 
