@@ -3,51 +3,74 @@
 BudsIA V3 is a local-first adaptive audio filtering platform for Android.
 
 The project is intentionally built as replaceable, observable stages so capture, routing,
-DSP, neural inference and adaptation can be improved independently.
+deterministic DSP, neural enhancement and future adaptation can evolve independently.
 
 ## Current production live path
 
 ```
 Microphone
   -> Oboe / AAudio
-  -> lock-free input ring
-  -> native worker
-  -> deterministic DSP
+  -> lock-free native rings
+  -> deterministic native worker
+  -> DSP or verified streaming neural worker
   -> optional private-route monitor
 ```
 
-Kotlin/Compose controls the engine and reads low-frequency telemetry. PCM frames do not cross
-JNI one-by-one.
+The audio callback remains native and bounded. Neural inference never runs inside an Oboe
+callback.
 
 ## Implemented
 
 - Android 36 / Kotlin / Compose / Hilt
 - C++20 native audio core
 - Oboe 1.10.0
-- device-native sample rate discovery
+- device-native sample-rate discovery
 - exclusive-low-latency request with shared fallback
 - unprocessed-input request with voice-recognition fallback
 - SPSC lock-free input/output rings
-- dedicated DSP worker thread
-- RAW vs DSP A/B switch
+- dedicated native processing worker
+- RAW / DSP / AI modes
 - optional live monitor restricted to private outputs
 - actual route/device IDs surfaced to Kotlin
 - xruns when available
-- input drops / output underruns / output overruns
-- measured native callback and processing timings
+- input drops / AI-input drops / output underruns / output overruns
+- measured native callback, DSP and neural inference timings
+- realtime-factor watchdog with automatic AI -> DSP fallback
 - explicit microphone-active indicator
 - automatic stop when the live screen leaves foreground
 - no raw-audio persistence
-- Kotlin unit tests + host C++ ring-buffer test
+- verified model lifecycle with exact byte-size + SHA-256 validation
+- sherpa-onnx 1.13.8 streaming denoiser runtime
+- DPDFNet2 48 kHz HR MAX_QUALITY model option
+- Kotlin unit tests + host C++ concurrent SPSC test
 - debug/release CI
+- CI verification that required neural native libraries are packaged
 
 ## Neural enhancement
 
-A neural engine is **not** faked in the current build.
+The current AI path is real, local and explicitly gated.
 
-The next gated phase introduces causal streaming enhancement through ONNX Runtime Mobile.
-Execution-provider choice will be benchmark-driven: CPU/XNNPACK baselines first, then NNAPI
-only when it measurably improves the current model/device combination.
+The app starts the audio engine in deterministic DSP while the neural model is prepared and
+verified. Only after the model runtime reports a valid frame size and matching sample rate
+does the coordinator switch the live engine to AI mode. This prevents stale microphone
+backlog from accumulating while the model loads.
+
+Current neural baseline:
+
+- runtime: sherpa-onnx 1.13.8
+- model: DPDFNet2 48 kHz HR
+- provider: CPU baseline
+- model integrity: pinned size + SHA-256
+- automatic fallback: AI -> DSP
+- realtime watchdog: moving RTF > 1.10 after warmup triggers fallback
+
+The app does **not** claim device-specific latency or quality until physical-device validation
+has been completed.
+
+## Next phase
+
+Adaptive profiles will add versioned local preferences and environment-specific behavior
+without modifying the immutable factory model.
 
 ## Documentation
 
@@ -56,3 +79,4 @@ only when it measurably improves the current model/device combination.
 - `docs/ROADMAP.md`
 - `docs/TECHNOLOGY_BASELINE_2026.md`
 - `docs/adr/0001-native-realtime-core.md`
+- `docs/adr/0002-neural-runtime.md`
