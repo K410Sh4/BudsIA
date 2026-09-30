@@ -1,5 +1,6 @@
 package com.k410sh4.budsia.di
 
+import android.content.Context
 import com.k410sh4.budsia.core.audio.analysis.AudioMetricsAnalyzer
 import com.k410sh4.budsia.core.audio.capture.AndroidAudioCaptureEngine
 import com.k410sh4.budsia.core.audio.capture.AudioCaptureEngine
@@ -8,11 +9,16 @@ import com.k410sh4.budsia.core.audio.dsp.HighPassAudioPreprocessor
 import com.k410sh4.budsia.core.audio.enhancement.AudioEnhancementEngine
 import com.k410sh4.budsia.core.audio.enhancement.BypassAudioEnhancementEngine
 import com.k410sh4.budsia.core.audio.pipeline.AudioFocusPipeline
+import com.k410sh4.budsia.core.audio.realtime.NativeRealtimeAudioEngine
+import com.k410sh4.budsia.core.audio.realtime.RealtimeAudioEngine
+import com.k410sh4.budsia.core.audio.routing.AndroidAudioRouteMonitor
+import com.k410sh4.budsia.core.audio.routing.AudioRouteMonitor
 import com.k410sh4.budsia.core.diagnostics.AndroidMonotonicClock
 import com.k410sh4.budsia.core.diagnostics.MonotonicClock
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
@@ -20,6 +26,7 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object AudioModule {
 
+    // Pure-Kotlin reference path kept for deterministic tests and A/B diagnostics.
     @Provides
     @Singleton
     fun provideAudioCaptureEngine(): AudioCaptureEngine =
@@ -60,4 +67,16 @@ object AudioModule {
         metricsAnalyzer = metricsAnalyzer,
         clock = clock
     )
+
+    // Production realtime path: callbacks and DSP stay native; Kotlin only controls and observes.
+    @Provides
+    @Singleton
+    fun provideRealtimeAudioEngine(): RealtimeAudioEngine =
+        NativeRealtimeAudioEngine()
+
+    @Provides
+    @Singleton
+    fun provideAudioRouteMonitor(
+        @ApplicationContext context: Context
+    ): AudioRouteMonitor = AndroidAudioRouteMonitor(context)
 }
