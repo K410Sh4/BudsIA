@@ -53,6 +53,16 @@ class AndroidAudioRouteController(
             )
         }
 
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            return PreparedAudioRoute(
+                success = false,
+                inputDeviceId = inputDeviceId,
+                outputDeviceId = outputDeviceId,
+                communicationMode = true,
+                message = "O roteamento Bluetooth explícito do BudsIA requer Android 12 ou superior."
+            )
+        }
+
         if (!hasBluetoothConnectPermission()) {
             return PreparedAudioRoute(
                 success = false,
@@ -105,8 +115,10 @@ class AndroidAudioRouteController(
 
     @Synchronized
     override fun release() {
-        runCatching {
-            audioManager.clearCommunicationDevice()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            runCatching {
+                audioManager.clearCommunicationDevice()
+            }
         }
 
         if (ownsCommunicationMode) {
