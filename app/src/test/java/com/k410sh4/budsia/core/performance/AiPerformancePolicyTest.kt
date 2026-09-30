@@ -15,6 +15,7 @@ class AiPerformancePolicyTest {
             DeviceHealthSnapshot(
                 thermalSeverity = ThermalSeverity.NONE,
                 thermalHeadroomForecast10s = 0.3f,
+                cpuHeadroomPercent = 70f,
                 batteryPercent = 80,
                 charging = false,
                 lowMemory = false
@@ -23,6 +24,19 @@ class AiPerformancePolicyTest {
 
         assertEquals(AiPerformanceLevel.MAX, decision.level)
         assertFalse(decision.preferPowerEfficiency)
+    }
+
+    @Test
+    fun unknownThermalStatusDoesNotLookSevere() {
+        val decision = policy.decide(
+            DeviceHealthSnapshot(
+                thermalSeverity = ThermalSeverity.UNKNOWN,
+                batteryPercent = 80,
+                charging = false
+            )
+        )
+
+        assertEquals(AiPerformanceLevel.MAX, decision.level)
     }
 
     @Test
@@ -54,6 +68,39 @@ class AiPerformancePolicyTest {
             decision.level
         )
         assertTrue(decision.preferPowerEfficiency)
+    }
+
+    @Test
+    fun lowMemoryReleasesNeuralPathThroughDspOnlyDecision() {
+        val decision = policy.decide(
+            DeviceHealthSnapshot(
+                thermalSeverity = ThermalSeverity.NONE,
+                lowMemory = true
+            )
+        )
+
+        assertEquals(
+            AiPerformanceLevel.DSP_ONLY,
+            decision.level
+        )
+    }
+
+    @Test
+    fun cpuPressureKeepsPerformancePriority() {
+        val decision = policy.decide(
+            DeviceHealthSnapshot(
+                thermalSeverity = ThermalSeverity.NONE,
+                cpuHeadroomPercent = 5f,
+                batteryPercent = 90,
+                charging = false
+            )
+        )
+
+        assertEquals(
+            AiPerformanceLevel.BALANCED,
+            decision.level
+        )
+        assertFalse(decision.preferPowerEfficiency)
     }
 
     @Test
