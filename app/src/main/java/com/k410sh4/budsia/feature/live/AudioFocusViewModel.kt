@@ -20,6 +20,10 @@ import com.k410sh4.budsia.core.audio.routing.AudioRouteMonitor
 import com.k410sh4.budsia.core.performance.AiPerformanceGovernor
 import com.k410sh4.budsia.core.performance.AiPerformanceMonitor
 import com.k410sh4.budsia.core.performance.AiPerformanceSettingsRepository
+import com.k410sh4.budsia.core.diagnostics.MonotonicClock
+import com.k410sh4.budsia.core.validation.DeviceValidationEvaluator
+import com.k410sh4.budsia.core.validation.DeviceValidationSample
+import com.k410sh4.budsia.core.validation.DeviceValidationUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
@@ -43,7 +47,9 @@ class AudioFocusViewModel @Inject constructor(
     private val adaptiveProfiles: AdaptiveProfileRepository,
     private val performanceMonitor: AiPerformanceMonitor,
     private val performanceGovernor: AiPerformanceGovernor,
-    private val performanceSettings: AiPerformanceSettingsRepository
+    private val performanceSettings: AiPerformanceSettingsRepository,
+    private val validationEvaluator: DeviceValidationEvaluator,
+    private val clock: MonotonicClock
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AudioFocusUiState())
@@ -52,6 +58,7 @@ class AudioFocusViewModel @Inject constructor(
     private var sessionJob: Job? = null
     private var aiJob: Job? = null
     private var modelJob: Job? = null
+    private var validationJob: Job? = null
 
     init {
         viewModelScope.launch(Dispatchers.IO) {
@@ -373,6 +380,8 @@ class AudioFocusViewModel @Inject constructor(
     fun stop() {
         if (sessionJob == null) return
 
+        cancelValidation("Teste interrompido porque a sessão foi encerrada.")
+
         _uiState.update {
             it.copy(pipelineState = PipelineState.STOPPING)
         }
@@ -627,6 +636,172 @@ class AudioFocusViewModel @Inject constructor(
         }
     }
 
+    fun startValidation() {
+        if (validationJob?.isActive == true) return
+
+        val startState = _uiState.value
+        if (
+            startState.pipelineState != PipelineState.LISTENING ||
+            startState.snapshot == null
+        ) {
+            _uiState.update {
+                it.copy(
+                    validation = DeviceValidationUiState(
+                        message = "Inicie o áudio antes do teste de validação."
+                    )
+                )
+            }
+            return
+        }
+
+        val requestedMode = startState.selectedMode
+
+        validationJob = viewModelScope.launch(Dispatchers.Default) {
+            val startedAtNanos = clock.nowNanos()
+            val samples = mutableListOf<DeviceValidationSample>()
+
+            _uiState.update {
+                it.copy(
+                    validation = DeviceValidationUiState(
+                        running = true,
+                        progress = 0f,
+                        elapsedSeconds = 0,
+                        message = "Coletando telemetria local por 30 segundos."
+                    )
+                )
+            }
+
+            try {
+                for (second in 0..VALIDATION_DURATION_SECONDS) {
+                    val current = _uiState.value
+                    val audio = current.snapshot
+
+                    if (
+                        current.pipelineState != PipelineState.LISTENING ||
+                        audio == null
+                    ) {
+                        throw IllegalStateException(
+                            "A sessão de áudio deixou LISTENING durante o teste."
+                        )
+                    }
+
+                    val elapsedMs =
+                        (clock.nowNanos() - startedAtNanos) /
+                            1_000_000L
+
+                    samples += DeviceValidationSample(
+                        elapsedMs = elapsedMs,
+                        engineState = audio.state,
+                        processingMode = audio.processingMode,
+                        inputSampleRateHz = audio.inputSampleRateHz,
+                        outputSampleRateHz = audio.outputSampleRateHz,
+                        inputFrames = audio.inputFrames,
+                        outputFrames = audio.outputFrames,
+                        inputDroppedSamples =
+                            audio.droppedInputSamples,
+                        outputUnderrunSamples =
+                            audio.outputUnderrunSamples,
+                        inputXruns = audio.inputXruns,
+                        outputXruns = audio.outputXruns,
+                        monitoringEnabled =
+                            audio.monitoringEnabled,
+                        neuralState =
+                            current.neuralTelemetry.state,
+                        neuralModelId =
+                            current.neuralTelemetry.modelId,
+                        neuralRequiredSampleRateHz =
+                            current.neuralTelemetry
+                                .requiredSampleRateHz,
+                        neuralRealtimeFactor =
+                            current.neuralTelemetry
+                                .realtimeFactor,
+                        thermalLevel =
+                            current.performanceSnapshot
+                                .thermalLevel,
+                        batteryPercent =
+                            current.performanceSnapshot
+                                .batteryPercent
+                                .value,
+                        processCpuPercent =
+                            current.performanceSnapshot
+                                .processCpuPercent
+                                .value
+                    )
+
+                    _uiState.update {
+                        it.copy(
+                            validation = it.validation.copy(
+                                running = true,
+                                progress =
+                                    second.toFloat() /
+                                        VALIDATION_DURATION_SECONDS
+                                            .toFloat(),
+                                elapsedSeconds = second
+                            )
+                        )
+                    }
+
+                    if (second < VALIDATION_DURATION_SECONDS) {
+                        delay(1_000L)
+                    }
+                }
+
+                val report = validationEvaluator.evaluate(
+                    requestedMode = requestedMode,
+                    samples = samples
+                )
+
+                _uiState.update {
+                    it.copy(
+                        validation = DeviceValidationUiState(
+                            running = false,
+                            progress = 1f,
+                            elapsedSeconds =
+                                VALIDATION_DURATION_SECONDS,
+                            report = report,
+                            message =
+                                "Teste concluído sem salvar áudio."
+                        )
+                    )
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                _uiState.update {
+                    it.copy(
+                        validation = DeviceValidationUiState(
+                            running = false,
+                            message = error.message
+                                ?: "Falha no teste de validação."
+                        )
+                    )
+                }
+            } finally {
+                validationJob = null
+            }
+        }
+    }
+
+    fun cancelValidation() {
+        cancelValidation("Teste cancelado.")
+    }
+
+    private fun cancelValidation(message: String) {
+        if (validationJob?.isActive != true) return
+
+        validationJob?.cancel()
+        validationJob = null
+
+        _uiState.update {
+            it.copy(
+                validation = DeviceValidationUiState(
+                    running = false,
+                    message = message
+                )
+            )
+        }
+    }
+
     fun clearError() {
         _uiState.update { it.copy(errorMessage = null) }
         aiCoordinator.resetTelemetry()
@@ -702,7 +877,12 @@ class AudioFocusViewModel @Inject constructor(
         }
     }
 
+    companion object {
+        private const val VALIDATION_DURATION_SECONDS = 30
+    }
+
     override fun onCleared() {
+        validationJob?.cancel()
         aiJob?.cancel()
         sessionJob?.cancel()
         realtimeAudioEngine.stop()
