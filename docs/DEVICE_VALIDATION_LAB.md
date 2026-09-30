@@ -17,6 +17,10 @@ It is specifically designed to answer questions CI cannot answer, such as:
 
 ## Quick procedure
 
+> Route sanity check: selecting a Bluetooth A2DP output does **not** mean the headset microphone
+> is active. Before a headset-microphone test, stop audio and explicitly select the Bluetooth
+> HFP/SCO or BLE headset input. Android then owns the paired communication route.
+
 1. Connect the intended headset if applicable.
 2. Select the desired input/output while audio is stopped.
 3. Select RAW, DSP or AI.
@@ -39,6 +43,7 @@ describe one configuration.
 - route-disconnect delta;
 - input/output XRuns when Android exposes them;
 - maximum neural RTF;
+- sustained-realtime fallback only after a warm-up window and persistent moving + cumulative RTF pressure;
 - peak estimated BudsIA process CPU;
 - thermal/headroom state;
 - governor fallback;

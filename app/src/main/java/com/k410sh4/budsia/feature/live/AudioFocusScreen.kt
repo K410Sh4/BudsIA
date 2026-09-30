@@ -1,5 +1,6 @@
 package com.k410sh4.budsia.feature.live
 
+import android.media.AudioDeviceInfo
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -1531,7 +1532,13 @@ private fun RoutingCard(
     val snapshot = state.snapshot
     val selectedInput = state.availableInputs
         .firstOrNull { it.id == state.selectedInputDeviceId }
+    val selectedOutput = state.availableOutputs
+        .firstOrNull { it.id == state.selectedOutputDeviceId }
     val bluetoothInputSelected = selectedInput?.isBluetooth == true
+    val a2dpOutputWithPhoneInput =
+        selectedOutput?.type ==
+            AudioDeviceInfo.TYPE_BLUETOOTH_A2DP &&
+            !bluetoothInputSelected
 
     Card(
         colors = CardDefaults.cardColors(
@@ -1572,6 +1579,15 @@ private fun RoutingCard(
                 enabled = !active,
                 onSelected = onOutputSelected
             )
+
+            if (a2dpOutputWithPhoneInput) {
+                Text(
+                    text =
+                        "Os Buds estão selecionados apenas como saída A2DP; a entrada continua no telefone. Para testar o microfone dos Buds, pare o áudio e selecione BLUETOOTH HFP/SCO em Entrada. Ao usar o microfone Bluetooth, o Android assume a rota de comunicação e a saída A2DP deixa de ser a rota simultânea.",
+                    color = Color(0xFFFFC857),
+                    fontSize = 12.sp
+                )
+            }
 
             if (bluetoothInputSelected) {
                 Text(
