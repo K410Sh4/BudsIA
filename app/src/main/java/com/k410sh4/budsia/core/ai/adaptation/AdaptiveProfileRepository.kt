@@ -11,6 +11,7 @@ interface AdaptiveProfileRepository {
 
     suspend fun applyFeedback(
         profileId: String,
-        feedback: AdaptiveFeedback
+        feedback: AdaptiveFeedback,
+        modelId: String
     ): Result<AdaptiveAudioProfile>
 }
