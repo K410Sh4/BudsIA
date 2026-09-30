@@ -6,52 +6,72 @@ This file records technology choices separately from product claims.
 
 Production path:
 
-- Oboe 1.10.0
-- AAudio on supported Android versions through Oboe
-- C++20
-- lock-free SPSC rings
-- worker-thread DSP/inference
-- Kotlin/JNI only for control and low-frequency telemetry
+- Oboe 1.10.0;
+- AAudio on supported Android versions through Oboe;
+- C++20;
+- lock-free SPSC rings;
+- worker-thread DSP/inference;
+- Kotlin/JNI only for control and low-frequency telemetry.
 
-The app never performs JNI calls for every audio frame.
+The Oboe callback never performs neural inference or blocking managed-runtime work.
 
-## Neural runtime — next phase
+## Neural runtime
 
-The planned model runtime is ONNX Runtime Mobile.
+Current runtime:
 
-Execution providers will be selected through measured device benchmarks rather than brand
-assumptions:
+- sherpa-onnx 1.13.8;
+- ONNX Runtime supplied by the verified sherpa Android runtime;
+- CPU provider baseline;
+- streaming online speech denoiser;
+- exact sample-rate model selection.
 
-1. Quantized model: CPU baseline first.
-2. Non-quantized model: XNNPACK baseline first.
-3. NNAPI only when measured latency/energy/quality is better on the current device/model.
+Pinned production candidates:
 
-A faster accelerator is not assumed merely because a GPU/NPU exists.
+- DPDFNet2 48 kHz HR for exact 48 kHz routes;
+- GTCRN Simple for exact 16 kHz routes.
 
-Reference:
-https://onnxruntime.ai/docs/tutorials/mobile/
+The app does not run a model at the wrong sample rate and does not hide resampling behind a
+quality label.
+
+## 2026 acceleration policy
+
+NNAPI was deprecated in Android 15 / API 35. BudsIA therefore does not treat NNAPI as the
+default future acceleration path.
+
+Current policy:
+
+1. CPU is the required correctness baseline.
+2. Any XNNPACK or vendor accelerator experiment must be benchmarked against the exact model.
+3. Qualcomm QNN may be evaluated only on supported devices through a separately packaged,
+   auditable runtime.
+4. A hardware accelerator is promoted only when measured latency, energy and output quality
+   improve without increasing stream instability.
+5. Unsupported acceleration always falls back to the verified CPU path.
+
+No accelerator is selected only because a phone advertises a GPU or NPU.
+
+References:
+
+- https://developer.android.com/ndk/guides/neuralnetworks
+- https://onnxruntime.ai/docs/execution-providers/
+- https://onnxruntime.ai/docs/build/android.html
+
+## Local adaptation storage
+
+Adaptive preferences use AndroidX DataStore Preferences 1.2.1, the stable 2026 line.
+
+The stored profile contains only bounded preference metadata. Raw PCM and neural activations
+are not stored.
 
 ## Model policy
 
-The first neural filter will be causal and streaming.
+Factory neural assets are immutable after integrity verification.
 
-Candidate families:
+Personal adaptation is kept separately:
 
-- compact convolutional/TCN recurrent mask estimator;
-- RNNoise-class lightweight baseline;
-- DeepFilterNet-inspired full-band enhancement experiments.
+Factory -> Adaptive Profile -> Candidate Mapping -> Physical A/B Evaluation -> Promote/Rollback
 
-A large Transformer is not the default for a continuous mobile audio callback pipeline.
-
-## Model promotion
-
-Factory model is immutable.
-
-Personal adaptation and candidate models are kept separately:
-
-Factory -> Adaptive Profile -> Candidate -> Evaluation -> Promote/Rollback
-
-No candidate is promoted without measured regression checks.
+A profile does not rewrite model weights.
 
 ## Measurements
 
@@ -63,3 +83,10 @@ BudsIA distinguishes:
 
 Bluetooth codec latency must never be presented as measured unless it has actually been
 measured.
+
+## Promotion rule
+
+No runtime, model, route policy or adaptive mapping is promoted solely because it is newer.
+
+Promotion requires repeatable measurements on the target device and a documented rollback
+path.
