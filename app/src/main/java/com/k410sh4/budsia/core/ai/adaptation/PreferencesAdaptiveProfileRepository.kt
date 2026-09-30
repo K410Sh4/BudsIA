@@ -165,7 +165,7 @@ class PreferencesAdaptiveProfileRepository(
             revision = (
                 preferences[revisionKey(environment)] ?: 0L
                 ).coerceAtLeast(0L),
-            preferredEnhancementStrength = mix,
+            preferredEnhancementStrength = strength,
             feedbackCount = feedbackCount,
             positiveFeedbackCount = positiveCount
         )
