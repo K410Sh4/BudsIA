@@ -59,6 +59,9 @@ callback.
 - Android Performance Hint session on the stable neural inference thread
 - measured inference duration reported to ADPF every neural cycle
 - Android 15+ power-efficiency scheduling hint when the governor allows it
+- local Factory vs Candidate A/B audition gate
+- per-environment explicit preference counters
+- no automatic candidate promotion from subjective preference
 
 ## Sample-rate-aware AI
 
@@ -121,6 +124,16 @@ its threshold is configurable from 5% to 30%.
 MAX_QUALITY / BALANCED / ECO remain recommendations; BudsIA never claims that a different
 model is active unless route and verified model are actually compatible.
 
+## Local A/B evaluation
+
+BudsIA now includes a local comparison harness for the adaptive candidate. A vote is enabled
+only after the user has auditioned both **IA Factory** and **Candidato** in the same round.
+
+The app stores only per-environment preference counters and reports whether the evidence is
+still insufficient, mixed, Factory-preferred or Candidate-preferred. This is an explicit
+preference summary, not an objective acoustic-quality score, and never promotes the candidate
+automatically.
+
 ## Validation status
 
 CI verifies code, model hashes/sizes, native runtime packaging, unit tests, debug APK and
@@ -144,4 +157,6 @@ device-specific latency remain device-validation pending.
 - `docs/AI_PERFORMANCE.md`
 - `docs/adr/0006-ai-performance-governor.md`
 - `docs/adr/0007-adpf-performance-hints.md`
+- `docs/adr/0008-local-adaptive-ab-evaluation.md`
 - `docs/adr/0005-candidate-adaptive-control.md`
+- `docs/ADAPTIVE_AB_EVALUATION.md`
