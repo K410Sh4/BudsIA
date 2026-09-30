@@ -2,6 +2,7 @@ package com.k410sh4.budsia.core.ai.adaptation
 
 import android.content.Context
 import androidx.datastore.core.DataStore
+import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.floatPreferencesKey
@@ -27,6 +28,9 @@ class PreferencesAdaptiveProfileRepository(
 
     private val store: DataStore<Preferences> =
         PreferenceDataStoreFactory.create(
+            corruptionHandler = ReplaceFileCorruptionHandler {
+                emptyPreferences()
+            },
             scope = applicationScope,
             produceFile = {
                 context.preferencesDataStoreFile(STORE_NAME)
