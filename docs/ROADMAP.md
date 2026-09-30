@@ -50,7 +50,7 @@
 - output underrun test with monitoring enabled
 - RAW vs DSP vs AI listening comparison
 
-## Phase D — adaptive profiles — IMPLEMENTED AS CANDIDATE CONTROL, ACTIVATION PENDING
+## Phase D — adaptive profiles — IMPLEMENTED WITH OPT-IN EXPERIMENTAL RUNTIME CONTROL
 - immutable factory model remains unchanged
 - stable DataStore 1.2.1 persistence
 - schema-versioned local profile
@@ -63,7 +63,12 @@
 - unit-tested safety bounds
 - no raw audio persistence
 - no silent online model training
-- **not yet connected automatically to realtime enhancement**
+- opt-in deterministic dry/wet mapping to verified neural output
+- adaptive mixing outside Oboe callback
+- allocation-free reusable scratch buffer
+- live profile revision/strength telemetry
+- frame mismatch bypasses adaptive mix instead of corrupting output
+- default OFF with immediate rollback to 100% neural output
 
 ### Promotion gate for adaptive control
 - define a deterministic mapping to supported DSP/neural parameters
