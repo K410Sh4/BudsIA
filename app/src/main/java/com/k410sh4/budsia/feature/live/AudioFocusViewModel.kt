@@ -321,7 +321,10 @@ class AudioFocusViewModel @Inject constructor(
         if (learningJob?.isActive == true) return
 
         learningJob = viewModelScope.launch(Dispatchers.IO) {
-            val result = adaptiveProfileController.teach(feedback)
+            val result = adaptiveProfileController.teach(
+                feedback = feedback,
+                modelId = modelId
+            )
 
             _uiState.update {
                 it.copy(
