@@ -23,7 +23,7 @@ class RoomAdaptiveProfileRepository(
 
     override fun observeProfiles(): Flow<List<AdaptiveAudioProfile>> =
         dao.observeAll().map { entities ->
-            entities.map(AdaptiveProfileEntity::toDomain)
+            entities.map { it.toDomain() }
         }
 
     override fun observeActive(): Flow<AdaptiveAudioProfile?> =
