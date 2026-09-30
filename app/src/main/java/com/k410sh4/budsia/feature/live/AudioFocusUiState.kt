@@ -8,6 +8,9 @@ import com.k410sh4.budsia.core.audio.model.PipelineState
 import com.k410sh4.budsia.core.audio.realtime.RealtimeAudioSnapshot
 import com.k410sh4.budsia.core.audio.realtime.RealtimeProcessingMode
 import com.k410sh4.budsia.core.audio.routing.AudioDeviceDescriptor
+import com.k410sh4.budsia.core.performance.AiPerformanceDecision
+import com.k410sh4.budsia.core.performance.AiPerformanceSettings
+import com.k410sh4.budsia.core.performance.DevicePerformanceSnapshot
 
 data class AudioFocusUiState(
     val pipelineState: PipelineState = PipelineState.IDLE,
@@ -27,5 +30,10 @@ data class AudioFocusUiState(
     val adaptiveProfile: AdaptiveAudioProfile =
         AdaptiveAudioProfile.factory(AcousticEnvironment.GENERAL),
     val adaptiveControlCandidateEnabled: Boolean = false,
+    val performanceSnapshot: DevicePerformanceSnapshot =
+        DevicePerformanceSnapshot(),
+    val performanceSettings: AiPerformanceSettings =
+        AiPerformanceSettings(),
+    val performanceDecision: AiPerformanceDecision? = null,
     val errorMessage: String? = null
 )

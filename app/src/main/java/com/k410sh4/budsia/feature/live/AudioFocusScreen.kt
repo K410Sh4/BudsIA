@@ -58,6 +58,8 @@ import com.k410sh4.budsia.core.ai.models.ModelInstallState
 import com.k410sh4.budsia.core.audio.model.PipelineState
 import com.k410sh4.budsia.core.audio.realtime.RealtimeProcessingMode
 import com.k410sh4.budsia.core.audio.routing.AudioDeviceDescriptor
+import com.k410sh4.budsia.core.performance.AiPerformanceSettings
+import com.k410sh4.budsia.core.performance.MeasurementKind
 import java.util.Locale
 
 @Composable
@@ -104,7 +106,11 @@ fun AudioFocusRoute(
         onGoodAsIs = viewModel::teachGoodAsIs,
         onResetProfile = viewModel::resetAdaptiveProfile,
         onAdaptiveControlCandidateChanged =
-            viewModel::setAdaptiveControlCandidateEnabled
+            viewModel::setAdaptiveControlCandidateEnabled,
+        onLowBatteryAutoFallbackChanged =
+            viewModel::setLowBatteryAutoFallbackEnabled,
+        onStopAiBelowBatteryPercentChanged =
+            viewModel::setStopAiBelowBatteryPercent
     )
 }
 
@@ -129,7 +135,9 @@ private fun AudioFocusScreen(
     onMoreNatural: () -> Unit,
     onGoodAsIs: () -> Unit,
     onResetProfile: () -> Unit,
-    onAdaptiveControlCandidateChanged: (Boolean) -> Unit
+    onAdaptiveControlCandidateChanged: (Boolean) -> Unit,
+    onLowBatteryAutoFallbackChanged: (Boolean) -> Unit,
+    onStopAiBelowBatteryPercentChanged: (Int) -> Unit
 ) {
     val active = state.pipelineState == PipelineState.LISTENING ||
         state.pipelineState == PipelineState.STARTING ||
@@ -207,6 +215,14 @@ private fun AudioFocusScreen(
             onResetProfile = onResetProfile,
             onAdaptiveControlCandidateChanged =
                 onAdaptiveControlCandidateChanged
+        )
+
+        PerformanceCard(
+            state = state,
+            onLowBatteryAutoFallbackChanged =
+                onLowBatteryAutoFallbackChanged,
+            onStopAiBelowBatteryPercentChanged =
+                onStopAiBelowBatteryPercentChanged
         )
 
         if (
@@ -658,6 +674,216 @@ private fun AdaptiveProfileCard(
 }
 
 @Composable
+private fun PerformanceCard(
+    state: AudioFocusUiState,
+    onLowBatteryAutoFallbackChanged: (Boolean) -> Unit,
+    onStopAiBelowBatteryPercentChanged: (Int) -> Unit
+) {
+    val snapshot = state.performanceSnapshot
+    val settings = state.performanceSettings
+    val decision = state.performanceDecision
+    val ai = state.neuralTelemetry
+
+    var batteryLimit by remember(
+        settings.stopAiBelowBatteryPercent
+    ) {
+        mutableFloatStateOf(
+            settings.stopAiBelowBatteryPercent.toFloat()
+        )
+    }
+
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        shape = RoundedCornerShape(22.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(9.dp)
+        ) {
+            Text(
+                text = "AI PERFORMANCE • ADPF",
+                style = MaterialTheme.typography.labelLarge
+            )
+
+            MetricRow(
+                "Tier recomendado",
+                decision?.tier?.name ?: "ANALISANDO"
+            )
+            MetricRow(
+                "Performance Hint",
+                when {
+                    ai.state != NeuralPipelineState.RUNNING ->
+                        "INATIVO"
+                    ai.performanceHintSupported ->
+                        "ATIVO"
+                    else ->
+                        "NÃO SUPORTADO"
+                }
+            )
+            MetricRow(
+                "Hint eficiência",
+                if (
+                    ai.state == NeuralPipelineState.RUNNING &&
+                    ai.powerEfficiencyHintActive
+                ) {
+                    "ATIVO"
+                } else {
+                    "OFF"
+                }
+            )
+            MetricRow(
+                "Térmico",
+                "${snapshot.thermalLevel.name} • MEASURED"
+            )
+            MetricRow(
+                "Headroom térmico agora",
+                snapshot.thermalHeadroomNow.value?.let {
+                    "%.2f • %s".format(
+                        Locale.US,
+                        it,
+                        snapshot.thermalHeadroomNow.kind.name
+                    )
+                } ?: "UNKNOWN"
+            )
+            MetricRow(
+                "Headroom térmico +10s",
+                snapshot.thermalHeadroomForecast10s.value?.let {
+                    "%.2f • %s".format(
+                        Locale.US,
+                        it,
+                        snapshot.thermalHeadroomForecast10s.kind.name
+                    )
+                } ?: "UNKNOWN"
+            )
+            MetricRow(
+                "CPU headroom",
+                snapshot.cpuHeadroomPercent.value?.let {
+                    "%.1f%% • %s".format(
+                        Locale.US,
+                        it,
+                        snapshot.cpuHeadroomPercent.kind.name
+                    )
+                } ?: "UNKNOWN"
+            )
+            MetricRow(
+                "CPU BudsIA",
+                snapshot.processCpuPercent.value?.let {
+                    "%.1f%% • %s".format(
+                        Locale.US,
+                        it,
+                        snapshot.processCpuPercent.kind.name
+                    )
+                } ?: "UNKNOWN"
+            )
+            MetricRow(
+                "Bateria",
+                snapshot.batteryPercent.value?.let {
+                    "$it% • ${snapshot.batteryPercent.kind.name}"
+                } ?: "UNKNOWN"
+            )
+            MetricRow(
+                "Carregando",
+                snapshot.isCharging.value?.let {
+                    "${if (it) "SIM" else "NÃO"} • ${snapshot.isCharging.kind.name}"
+                } ?: "UNKNOWN"
+            )
+            MetricRow(
+                "Economia energia",
+                snapshot.powerSaveMode.value?.let {
+                    "${if (it) "ATIVA" else "OFF"} • ${snapshot.powerSaveMode.kind.name}"
+                } ?: "UNKNOWN"
+            )
+            MetricRow(
+                "Memória livre",
+                snapshot.availableMemoryBytes.value?.let {
+                    "${formatBytes(it)} • ${snapshot.availableMemoryBytes.kind.name}"
+                } ?: "UNKNOWN"
+            )
+
+            HorizontalDivider()
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement =
+                    Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Parar IA com bateria baixa")
+                    Text(
+                        text =
+                            "Opcional • proteção térmica e de memória continua obrigatória",
+                        color =
+                            MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp
+                    )
+                }
+
+                Switch(
+                    checked =
+                        settings.lowBatteryAutoFallbackEnabled,
+                    onCheckedChange =
+                        onLowBatteryAutoFallbackChanged
+                )
+            }
+
+            if (settings.lowBatteryAutoFallbackEnabled) {
+                MetricRow(
+                    "Limite da bateria",
+                    "${batteryLimit.toInt()}%"
+                )
+
+                Slider(
+                    value = batteryLimit,
+                    onValueChange = {
+                        batteryLimit = it
+                    },
+                    onValueChangeFinished = {
+                        onStopAiBelowBatteryPercentChanged(
+                            batteryLimit
+                                .toInt()
+                                .coerceIn(
+                                    AiPerformanceSettings
+                                        .MIN_STOP_PERCENT,
+                                    AiPerformanceSettings
+                                        .MAX_STOP_PERCENT
+                                )
+                        )
+                    },
+                    valueRange =
+                        AiPerformanceSettings
+                            .MIN_STOP_PERCENT.toFloat()..
+                            AiPerformanceSettings
+                                .MAX_STOP_PERCENT.toFloat()
+                )
+            }
+
+            decision?.let {
+                Text(
+                    text = it.reason,
+                    color = if (it.forceFallback) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    fontSize = 12.sp
+                )
+            }
+
+            Text(
+                text = "Headroom térmico e CPU headroom são estimativas do Android. CPU BudsIA é uma estimativa do processo. Nenhuma temperatura, autonomia ou ganho de NPU é inventado.",
+                color =
+                    MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 11.sp
+            )
+        }
+    }
+}
+
+@Composable
 private fun NeuralDiagnosticsCard(
     state: AudioFocusUiState
 ) {
@@ -703,6 +929,10 @@ private fun NeuralDiagnosticsCard(
                 ai.realtimeFactor?.let {
                     "%.2f×".format(Locale.US, it)
                 } ?: "—"
+            )
+            MetricRow(
+                "Tier recomendado",
+                ai.recommendedPerformanceTier?.name ?: "—"
             )
             MetricRow(
                 "Frames IA",

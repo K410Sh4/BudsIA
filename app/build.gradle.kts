@@ -14,8 +14,8 @@ android {
         applicationId = "com.k410sh4.budsia"
         minSdk = 30
         targetSdk = 36
-        versionCode = 36
-        versionName = "3.0.0-dev07"
+        versionCode = 38
+        versionName = "3.0.0-dev09"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
 

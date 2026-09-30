@@ -50,6 +50,15 @@ callback.
 - explicit opt-in candidate adaptive mix between original and neural output
 - atomic live profile updates without restarting the audio stream
 - no silent model-weight training
+- measured Android thermal, battery and memory protection
+- process CPU load explicitly labeled ESTIMATED
+- mandatory AI -> DSP fallback on severe thermal / Android low-memory
+- optional user-configured low-battery AI fallback, OFF by default
+- current + 10-second thermal headroom estimates
+- Android 16 CPU headroom estimate when available
+- Android Performance Hint session on the stable neural inference thread
+- measured inference duration reported to ADPF every neural cycle
+- Android 15+ power-efficiency scheduling hint when the governor allows it
 
 ## Sample-rate-aware AI
 
@@ -93,6 +102,25 @@ output = original * (1 - strength) + neural * strength
 The mapping is bounded, reversible and never changes neural weights. It remains experimental
 until physical A/B validation passes.
 
+## AI performance protection
+
+BudsIA observes Android thermal state, predictive thermal headroom, battery, charging state,
+power-save mode and memory. On Android 16 it also consumes the platform CPU-headroom estimate.
+
+Severe thermal conditions, near-severe 10-second thermal forecast and Android low-memory
+signals force AI -> DSP to preserve stability.
+
+The neural worker runs on one long-lived thread. On supported Android versions a
+Performance Hint session receives the measured duration of every inference cycle; Android 15+
+may also receive a power-efficiency scheduling preference when the governor determines it is
+appropriate.
+
+A low-battery fallback is available as a user setting and is OFF by default. When enabled,
+its threshold is configurable from 5% to 30%.
+
+MAX_QUALITY / BALANCED / ECO remain recommendations; BudsIA never claims that a different
+model is active unless route and verified model are actually compatible.
+
 ## Validation status
 
 CI verifies code, model hashes/sizes, native runtime packaging, unit tests, debug APK and
@@ -113,4 +141,7 @@ device-specific latency remain device-validation pending.
 - `docs/adr/0004-local-adaptive-profiles.md`
 - `docs/ADAPTIVE_PROFILES.md`
 - `docs/ADAPTIVE_CONTROL_CANDIDATE.md`
+- `docs/AI_PERFORMANCE.md`
+- `docs/adr/0006-ai-performance-governor.md`
+- `docs/adr/0007-adpf-performance-hints.md`
 - `docs/adr/0005-candidate-adaptive-control.md`

@@ -10,12 +10,16 @@ import com.k410sh4.budsia.core.ai.models.VerifiedModelManager
 import com.k410sh4.budsia.core.audio.realtime.RealtimeAiTransport
 import com.k410sh4.budsia.core.audio.realtime.RealtimeAudioEngine
 import com.k410sh4.budsia.core.diagnostics.MonotonicClock
+import com.k410sh4.budsia.core.performance.AiPerformanceGovernor
+import com.k410sh4.budsia.core.performance.AiPerformanceMonitor
+import com.k410sh4.budsia.core.performance.InferencePerformanceHintFactory
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
+import kotlinx.coroutines.CoroutineDispatcher
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -48,13 +52,22 @@ object AiModule {
         audioEngine: RealtimeAudioEngine,
         transport: RealtimeAiTransport,
         clock: MonotonicClock,
-        adaptiveMixer: AdaptiveNeuralMixer
+        adaptiveMixer: AdaptiveNeuralMixer,
+        performanceMonitor: AiPerformanceMonitor,
+        performanceGovernor: AiPerformanceGovernor,
+        performanceHintFactory: InferencePerformanceHintFactory,
+        @AiInferenceDispatcher
+        inferenceDispatcher: CoroutineDispatcher
     ): StreamingAiCoordinator = StreamingAiCoordinator(
         modelManager = modelManager,
         enhancer = enhancer,
         audioEngine = audioEngine,
         transport = transport,
         clock = clock,
-        adaptiveMixer = adaptiveMixer
+        adaptiveMixer = adaptiveMixer,
+        performanceMonitor = performanceMonitor,
+        performanceGovernor = performanceGovernor,
+        performanceHintFactory = performanceHintFactory,
+        inferenceDispatcher = inferenceDispatcher
     )
 }
