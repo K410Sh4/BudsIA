@@ -31,26 +31,23 @@ class RoomAdaptiveProfileRepository(
 
     override suspend fun ensureDefaults() {
         mutationMutex.withLock {
-            if (dao.count() == 0) {
-                val now = wallClock.nowEpochMillis()
-                dao.insertAll(
-                    AdaptiveProfileDefaults.presets.map { profile ->
-                        profile.copy(
-                            updatedAtEpochMs = now
-                        ).toEntity()
-                    }
-                )
-                return
-            }
+            val now = wallClock.nowEpochMillis()
+            val emptyDatabase = dao.count() == 0
 
             dao.insertAll(
                 AdaptiveProfileDefaults.presets.map { preset ->
                     preset.copy(
-                        isActive = false,
-                        updatedAtEpochMs = wallClock.nowEpochMillis()
+                        isActive = emptyDatabase && preset.id == "general",
+                        updatedAtEpochMs = now
                     ).toEntity()
                 }
             )
+
+            if (dao.getActiveOnce() == null) {
+                check(dao.activate("general")) {
+                    "Unable to recover the default adaptive profile."
+                }
+            }
         }
     }
 
