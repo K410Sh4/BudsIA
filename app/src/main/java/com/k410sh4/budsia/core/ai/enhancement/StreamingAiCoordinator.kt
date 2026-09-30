@@ -1,11 +1,11 @@
 package com.k410sh4.budsia.core.ai.enhancement
 
-import android.os.SystemClock
 import com.k410sh4.budsia.core.ai.models.ModelManager
 import com.k410sh4.budsia.core.audio.realtime.RealtimeAiTransport
 import com.k410sh4.budsia.core.audio.realtime.RealtimeAudioEngine
 import com.k410sh4.budsia.core.audio.realtime.RealtimeEngineState
 import com.k410sh4.budsia.core.audio.realtime.RealtimeProcessingMode
+import com.k410sh4.budsia.core.diagnostics.MonotonicClock
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -55,7 +55,8 @@ class StreamingAiCoordinator(
     private val modelManager: ModelManager,
     private val enhancer: StreamingNeuralEnhancer,
     private val audioEngine: RealtimeAudioEngine,
-    private val transport: RealtimeAiTransport
+    private val transport: RealtimeAiTransport,
+    private val clock: MonotonicClock
 ) {
     private val _telemetry = MutableStateFlow(NeuralRuntimeTelemetry())
     val telemetry: StateFlow<NeuralRuntimeTelemetry> = _telemetry.asStateFlow()
@@ -143,7 +144,7 @@ class StreamingAiCoordinator(
                     "O transporte neural entregou um frame parcial."
                 }
 
-                val startNanos = SystemClock.elapsedRealtimeNanos()
+                val startNanos = clock.nowNanos()
                 val output = enhancer
                     .process(
                         samples = frame,
@@ -151,7 +152,7 @@ class StreamingAiCoordinator(
                     )
                     .getOrThrow()
                 val inferenceNanos =
-                    SystemClock.elapsedRealtimeNanos() - startNanos
+                    clock.nowNanos() - startNanos
 
                 check(
                     output.sampleRateHz ==
@@ -198,7 +199,7 @@ class StreamingAiCoordinator(
                     return
                 }
 
-                val now = SystemClock.elapsedRealtimeNanos()
+                val now = clock.nowNanos()
                 if (now - lastPublishNanos >= 200_000_000L) {
                     _telemetry.value = NeuralRuntimeTelemetry(
                         state = NeuralPipelineState.RUNNING,
