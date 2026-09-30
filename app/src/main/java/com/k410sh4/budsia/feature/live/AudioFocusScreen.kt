@@ -2193,16 +2193,21 @@ private fun RouteSelector(
                 onClick = { onSelected(device.id) },
                 enabled = enabled,
                 label = {
-                    Text(
-                        text = buildString {
-                            append(device.productName)
-                            append(" • ")
-                            append(device.typeLabel)
-                            if (device.isBluetooth) {
-                                append(" • BT")
-                            }
-                        }
-                    )
+                    Column(
+                        verticalArrangement =
+                            Arrangement.spacedBy(1.dp)
+                    ) {
+                        Text(
+                            text = device.humanDisplayName()
+                        )
+                        Text(
+                            text = device.technicalDisplayName(),
+                            color =
+                                MaterialTheme.colorScheme
+                                    .onSurfaceVariant,
+                            fontSize = 10.sp
+                        )
+                    }
                 }
             )
         }
