@@ -263,6 +263,14 @@ std::size_t NativeAudioEngine::readAiInput(
         ) != ProcessingMode::Ai) {
         return 0;
     }
+
+    // The neural runtime operates on its model-recommended frame size.
+    // Never return a partial frame: that would force allocations/copies on
+    // the managed side to stitch arbitrary callback fragments together.
+    if (aiInputRing_.availableToRead() < count) {
+        return 0;
+    }
+
     return aiInputRing_.read(destination, count);
 }
 
