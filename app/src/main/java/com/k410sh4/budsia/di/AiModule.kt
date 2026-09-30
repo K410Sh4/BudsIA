@@ -12,12 +12,14 @@ import com.k410sh4.budsia.core.audio.realtime.RealtimeAudioEngine
 import com.k410sh4.budsia.core.diagnostics.MonotonicClock
 import com.k410sh4.budsia.core.performance.AiPerformanceGovernor
 import com.k410sh4.budsia.core.performance.AiPerformanceMonitor
+import com.k410sh4.budsia.core.performance.InferencePerformanceHintFactory
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
+import kotlinx.coroutines.CoroutineDispatcher
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -52,7 +54,10 @@ object AiModule {
         clock: MonotonicClock,
         adaptiveMixer: AdaptiveNeuralMixer,
         performanceMonitor: AiPerformanceMonitor,
-        performanceGovernor: AiPerformanceGovernor
+        performanceGovernor: AiPerformanceGovernor,
+        performanceHintFactory: InferencePerformanceHintFactory,
+        @AiInferenceDispatcher
+        inferenceDispatcher: CoroutineDispatcher
     ): StreamingAiCoordinator = StreamingAiCoordinator(
         modelManager = modelManager,
         enhancer = enhancer,
@@ -61,6 +66,8 @@ object AiModule {
         clock = clock,
         adaptiveMixer = adaptiveMixer,
         performanceMonitor = performanceMonitor,
-        performanceGovernor = performanceGovernor
+        performanceGovernor = performanceGovernor,
+        performanceHintFactory = performanceHintFactory,
+        inferenceDispatcher = inferenceDispatcher
     )
 }
