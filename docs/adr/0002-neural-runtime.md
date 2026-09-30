@@ -66,3 +66,14 @@ AI -> DSP -> RAW
 
 No error in model download or inference may stop the microphone STOP control or corrupt the
 factory DSP path.
+
+
+## Release minification
+
+The sherpa-onnx JNI layer resolves configuration fields and result classes by exact JVM
+names. BudsIA therefore keeps `com.k2fsa.sherpa.onnx.**` from obfuscation in release builds.
+
+The BudsIA `NativeAudioBridge` is also name-bound through JNI and is kept explicitly.
+
+CI inspects the R8 release mapping and fails if these JNI contracts are renamed. A release
+that merely compiles is not considered sufficient.
