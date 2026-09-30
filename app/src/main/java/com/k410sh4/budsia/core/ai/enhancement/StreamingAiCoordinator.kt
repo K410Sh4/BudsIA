@@ -1,5 +1,7 @@
 package com.k410sh4.budsia.core.ai.enhancement
 
+import com.k410sh4.budsia.core.ai.adaptation.AdaptiveAudioMixer
+import com.k410sh4.budsia.core.ai.adaptation.AdaptiveProfileController
 import com.k410sh4.budsia.core.ai.models.ModelManager
 import com.k410sh4.budsia.core.audio.realtime.RealtimeAiTransport
 import com.k410sh4.budsia.core.audio.realtime.RealtimeAudioEngine
@@ -40,6 +42,11 @@ data class NeuralRuntimeTelemetry(
     val enhancedRms: Float? = null,
     val enhancedPeak: Float? = null,
     val enhancedWaveform: List<Float> = emptyList(),
+    val adaptiveProfileId: String? = null,
+    val adaptiveProfileName: String? = null,
+    val neuralMix: Float? = null,
+    val adaptiveMixApplied: Boolean = false,
+    val adaptiveMixReason: String? = null,
     val fallbackReason: String? = null,
     val errorMessage: String? = null
 )
@@ -49,14 +56,17 @@ data class NeuralRuntimeTelemetry(
  *
  * Oboe callbacks never invoke this class. The native input callback copies PCM
  * into a dedicated SPSC ring; this coordinator consumes complete model frames,
- * runs inference, and submits enhanced PCM to the native output ring.
+ * runs inference, applies a bounded user-learned mix, and submits enhanced PCM
+ * to the native output ring.
  */
 class StreamingAiCoordinator(
     private val modelManager: ModelManager,
     private val enhancer: StreamingNeuralEnhancer,
     private val audioEngine: RealtimeAudioEngine,
     private val transport: RealtimeAiTransport,
-    private val clock: MonotonicClock
+    private val clock: MonotonicClock,
+    private val profileController: AdaptiveProfileController,
+    private val adaptiveMixer: AdaptiveAudioMixer
 ) {
     private val _telemetry = MutableStateFlow(NeuralRuntimeTelemetry())
     val telemetry: StateFlow<NeuralRuntimeTelemetry> = _telemetry.asStateFlow()
@@ -94,9 +104,9 @@ class StreamingAiCoordinator(
             transport.clear()
             audioEngine.setProcessingMode(RealtimeProcessingMode.AI)
 
-            val frame = FloatArray(
-                capabilities.recommendedFrameSamples
-            )
+            val frame = FloatArray(capabilities.recommendedFrameSamples)
+            val originalFrame = FloatArray(capabilities.recommendedFrameSamples)
+
             val frameDurationNanos =
                 capabilities.recommendedFrameSamples.toDouble() /
                     capabilities.requiredSampleRateHz.toDouble() *
@@ -144,6 +154,8 @@ class StreamingAiCoordinator(
                     "O transporte neural entregou um frame parcial."
                 }
 
+                frame.copyInto(originalFrame)
+
                 val startNanos = clock.nowNanos()
                 val output = enhancer
                     .process(
@@ -151,8 +163,7 @@ class StreamingAiCoordinator(
                         sampleRateHz = capabilities.requiredSampleRateHz
                     )
                     .getOrThrow()
-                val inferenceNanos =
-                    clock.nowNanos() - startNanos
+                val inferenceNanos = clock.nowNanos() - startNanos
 
                 check(
                     output.sampleRateHz ==
@@ -161,21 +172,31 @@ class StreamingAiCoordinator(
                     "O runtime neural alterou a taxa de amostragem inesperadamente."
                 }
 
-                if (output.samples.isNotEmpty()) {
+                val profile = profileController.activeProfile.value
+                val mix = adaptiveMixer.mix(
+                    original = originalFrame,
+                    enhanced = output.samples,
+                    neuralMix = profile?.neuralMix ?: 1f
+                )
+
+                if (mix.samples.isNotEmpty()) {
                     transport.writeOutput(
-                        source = output.samples,
-                        requestedCount = output.samples.size
+                        source = mix.samples,
+                        requestedCount = mix.samples.size
                     )
-                    enhancedSamples += output.samples.size
+                    enhancedSamples += mix.samples.size
                 }
 
                 chunks++
                 totalInferenceNanos += inferenceNanos
-                maxInferenceNanos =
-                    maxOf(maxInferenceNanos, inferenceNanos)
+                maxInferenceNanos = maxOf(
+                    maxInferenceNanos,
+                    inferenceNanos
+                )
 
                 val currentRtf =
                     inferenceNanos.toDouble() / frameDurationNanos
+
                 realtimeFactorEma = if (chunks == 1L) {
                     currentRtf
                 } else {
@@ -183,9 +204,6 @@ class StreamingAiCoordinator(
                         (0.10 * currentRtf)
                 }
 
-                // A sustained RTF above 1 means the worker is slower than the
-                // incoming stream. Fail safely before the input ring grows into
-                // audible multi-second latency.
                 if (
                     chunks >= 100L &&
                     realtimeFactorEma > 1.10
@@ -221,12 +239,17 @@ class StreamingAiCoordinator(
                         realtimeFactor = realtimeFactorEma,
                         chunksProcessed = chunks,
                         samplesEnhanced = enhancedSamples,
-                        enhancedRms = rms(output.samples),
-                        enhancedPeak = peak(output.samples),
+                        enhancedRms = rms(mix.samples),
+                        enhancedPeak = peak(mix.samples),
                         enhancedWaveform = waveform(
-                            output.samples,
+                            mix.samples,
                             points = 72
-                        )
+                        ),
+                        adaptiveProfileId = profile?.id,
+                        adaptiveProfileName = profile?.name,
+                        neuralMix = mix.neuralMix,
+                        adaptiveMixApplied = mix.applied,
+                        adaptiveMixReason = mix.reason
                     )
                     lastPublishNanos = now
                 }
