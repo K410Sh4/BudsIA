@@ -41,6 +41,7 @@ class DeviceValidationEvaluator @Inject constructor() {
 
         val checks = buildList {
             add(engineCheck(samples))
+            add(processingModeCheck(requestedMode, samples))
             add(sampleRateCheck(samples))
             add(inputDropCheck(samples, inputDropsDelta))
             add(outputUnderrunCheck(samples, outputUnderrunsDelta))
@@ -119,6 +120,38 @@ class DeviceValidationEvaluator @Inject constructor() {
                 title = "Núcleo realtime",
                 status = ValidationStatus.FAIL,
                 detail = "Estado realtime instável durante o teste."
+            )
+        }
+    }
+
+    private fun processingModeCheck(
+        requestedMode: RealtimeProcessingMode,
+        samples: List<DeviceValidationSample>
+    ): ValidationCheck {
+        val observed = samples
+            .map { it.processingMode }
+            .distinct()
+
+        return if (
+            observed.size == 1 &&
+            observed.single() == requestedMode
+        ) {
+            ValidationCheck(
+                id = "processing_mode",
+                title = "Modo de processamento",
+                status = ValidationStatus.PASS,
+                detail = requestedMode.name + " permaneceu ativo."
+            )
+        } else {
+            ValidationCheck(
+                id = "processing_mode",
+                title = "Modo de processamento",
+                status = ValidationStatus.FAIL,
+                detail = "Solicitado=" +
+                    requestedMode.name +
+                    ", observado=" +
+                    observed.joinToString { it.name } +
+                    "."
             )
         }
     }
