@@ -87,7 +87,9 @@ private fun AudioFocusScreen(
     onMonitoringChanged: (Boolean) -> Unit
 ) {
     val active = state.pipelineState == PipelineState.LISTENING ||
-        state.pipelineState == PipelineState.STARTING
+        state.pipelineState == PipelineState.STARTING ||
+        state.pipelineState == PipelineState.STOPPING
+    val stopping = state.pipelineState == PipelineState.STOPPING
 
     val snapshot = state.snapshot
 
@@ -204,6 +206,7 @@ private fun AudioFocusScreen(
             Button(
                 onClick = if (active) onStop else onStart,
                 modifier = Modifier.fillMaxWidth(),
+                enabled = !stopping,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = if (active) {
                         Color(0xFF5A1E28)
@@ -217,7 +220,13 @@ private fun AudioFocusScreen(
                     contentDescription = null
                 )
                 Spacer(modifier = Modifier.size(8.dp))
-                Text(if (active) "PARAR" else "INICIAR ÁUDIO")
+                Text(
+                    when {
+                        stopping -> "ENCERRANDO..."
+                        active -> "PARAR"
+                        else -> "INICIAR ÁUDIO"
+                    }
+                )
             }
         }
 
