@@ -14,8 +14,8 @@ android {
         applicationId = "com.k410sh4.budsia"
         minSdk = 30
         targetSdk = 36
-        versionCode = 32
-        versionName = "3.0.0-dev03"
+        versionCode = 33
+        versionName = "3.0.0-dev04"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
 
@@ -90,6 +90,7 @@ dependencies {
     ksp("com.google.dagger:hilt-compiler:2.60.1")
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+    implementation("androidx.datastore:datastore-preferences:1.2.1")
 
     implementation("com.google.oboe:oboe:1.10.0")
 
