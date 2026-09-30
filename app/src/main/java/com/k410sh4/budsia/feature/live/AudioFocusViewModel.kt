@@ -2,6 +2,9 @@ package com.k410sh4.budsia.feature.live
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.k410sh4.budsia.core.ai.adaptation.AcousticEnvironment
+import com.k410sh4.budsia.core.ai.adaptation.AdaptiveProfileRepository
+import com.k410sh4.budsia.core.ai.adaptation.AudioFeedback
 import com.k410sh4.budsia.core.ai.enhancement.NeuralPipelineState
 import com.k410sh4.budsia.core.ai.enhancement.StreamingAiCoordinator
 import com.k410sh4.budsia.core.ai.models.AiModelCatalog
@@ -31,7 +34,8 @@ class AudioFocusViewModel @Inject constructor(
     private val realtimeAudioEngine: RealtimeAudioEngine,
     private val routeMonitor: AudioRouteMonitor,
     private val modelManager: ModelManager,
-    private val aiCoordinator: StreamingAiCoordinator
+    private val aiCoordinator: StreamingAiCoordinator,
+    private val adaptiveProfiles: AdaptiveProfileRepository
 ) : ViewModel() {
 
     private val modelId = AiModelCatalog.DPDFNET2_48K_HR.id
@@ -52,6 +56,14 @@ class AudioFocusViewModel @Inject constructor(
             modelManager.statuses.collect { statuses ->
                 _uiState.update {
                     it.copy(modelStatus = statuses[modelId])
+                }
+            }
+        }
+
+        viewModelScope.launch {
+            adaptiveProfiles.activeProfile.collect { profile ->
+                _uiState.update {
+                    it.copy(adaptiveProfile = profile)
                 }
             }
         }
@@ -340,9 +352,45 @@ class AudioFocusViewModel @Inject constructor(
         }
     }
 
+    fun selectEnvironment(environment: AcousticEnvironment) {
+        viewModelScope.launch(Dispatchers.IO) {
+            adaptiveProfiles.selectEnvironment(environment)
+        }
+    }
+
+    fun teachMoreFilter() {
+        applyFeedback(AudioFeedback.MORE_FILTER)
+    }
+
+    fun teachMoreNatural() {
+        applyFeedback(AudioFeedback.MORE_NATURAL)
+    }
+
+    fun teachGoodAsIs() {
+        applyFeedback(AudioFeedback.GOOD_AS_IS)
+    }
+
+    fun setPreferredStrength(value: Float) {
+        viewModelScope.launch(Dispatchers.IO) {
+            adaptiveProfiles.setPreferredEnhancementStrength(value)
+        }
+    }
+
+    fun resetAdaptiveProfile() {
+        viewModelScope.launch(Dispatchers.IO) {
+            adaptiveProfiles.resetActiveProfile()
+        }
+    }
+
     fun clearError() {
         _uiState.update { it.copy(errorMessage = null) }
         aiCoordinator.resetTelemetry()
+    }
+
+    private fun applyFeedback(feedback: AudioFeedback) {
+        viewModelScope.launch(Dispatchers.IO) {
+            adaptiveProfiles.applyFeedback(feedback)
+        }
     }
 
     private fun launchAiWorker() {
