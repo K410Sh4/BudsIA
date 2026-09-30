@@ -47,6 +47,8 @@ callback.
 - stable AndroidX DataStore 1.2.1 for local adaptive preferences
 - independent versioned profiles for Geral / Casa / Rua / Trabalho / Carro
 - bounded explicit feedback learning: Mais filtro / Mais natural / Está bom assim
+- explicit opt-in candidate adaptive mix between original and neural output
+- atomic live profile updates without restarting the audio stream
 - no silent model-weight training
 
 ## Sample-rate-aware AI
@@ -79,9 +81,17 @@ BudsIA now stores explicit listening preferences per acoustic environment in app
 DataStore. The tuner uses a bounded decaying step, so repeated feedback changes the preferred
 strength progressively less over time.
 
-This is intentionally a **preference-learning layer**, not hidden model retraining. The
-stored preference does not automatically change realtime audio yet. A future profile-to-audio
-mapping must pass physical A/B validation and retain a factory rollback path before activation.
+This is intentionally a **preference-learning layer**, not hidden model retraining.
+
+A deterministic candidate mapping is now available behind an explicit switch that is OFF by
+default:
+
+```
+output = original * (1 - strength) + neural * strength
+```
+
+The mapping is bounded, reversible and never changes neural weights. It remains experimental
+until physical A/B validation passes.
 
 ## Validation status
 
@@ -102,3 +112,5 @@ device-specific latency remain device-validation pending.
 - `docs/adr/0003-explicit-bluetooth-routing.md`
 - `docs/adr/0004-local-adaptive-profiles.md`
 - `docs/ADAPTIVE_PROFILES.md`
+- `docs/ADAPTIVE_CONTROL_CANDIDATE.md`
+- `docs/adr/0005-candidate-adaptive-control.md`
