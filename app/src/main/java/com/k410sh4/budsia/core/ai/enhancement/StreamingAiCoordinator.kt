@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
+import kotlin.math.abs
+import kotlin.math.sqrt
 
 enum class NeuralPipelineState {
     IDLE,
@@ -35,6 +37,9 @@ data class NeuralRuntimeTelemetry(
     val realtimeFactor: Double? = null,
     val chunksProcessed: Long = 0L,
     val samplesEnhanced: Long = 0L,
+    val enhancedRms: Float? = null,
+    val enhancedPeak: Float? = null,
+    val enhancedWaveform: List<Float> = emptyList(),
     val fallbackReason: String? = null,
     val errorMessage: String? = null
 )
@@ -214,7 +219,13 @@ class StreamingAiCoordinator(
                                 1_000_000.0,
                         realtimeFactor = realtimeFactorEma,
                         chunksProcessed = chunks,
-                        samplesEnhanced = enhancedSamples
+                        samplesEnhanced = enhancedSamples,
+                        enhancedRms = rms(output.samples),
+                        enhancedPeak = peak(output.samples),
+                        enhancedWaveform = waveform(
+                            output.samples,
+                            points = 72
+                        )
                     )
                     lastPublishNanos = now
                 }
@@ -260,5 +271,50 @@ class StreamingAiCoordinator(
             fallbackReason = reason,
             errorMessage = reason
         )
+    }
+
+    private fun rms(samples: FloatArray): Float? {
+        if (samples.isEmpty()) return null
+        var sum = 0.0
+        for (sample in samples) {
+            sum += sample.toDouble() * sample.toDouble()
+        }
+        return sqrt(sum / samples.size).toFloat()
+    }
+
+    private fun peak(samples: FloatArray): Float? {
+        if (samples.isEmpty()) return null
+        var result = 0f
+        for (sample in samples) {
+            result = maxOf(result, abs(sample))
+        }
+        return result
+    }
+
+    private fun waveform(
+        samples: FloatArray,
+        points: Int
+    ): List<Float> {
+        if (samples.isEmpty() || points <= 0) return emptyList()
+
+        val bucket = maxOf(1, samples.size / points)
+        val result = ArrayList<Float>(points)
+        var start = 0
+
+        while (start < samples.size && result.size < points) {
+            val end = minOf(samples.size, start + bucket)
+            var value = 0f
+            for (index in start until end) {
+                value = maxOf(value, abs(samples[index]))
+            }
+            result += value.coerceIn(0f, 1f)
+            start = end
+        }
+
+        while (result.size < points) {
+            result += 0f
+        }
+
+        return result
     }
 }
