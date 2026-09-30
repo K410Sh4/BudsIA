@@ -14,8 +14,8 @@ android {
         applicationId = "com.k410sh4.budsia"
         minSdk = 30
         targetSdk = 36
-        versionCode = 33
-        versionName = "3.0.0-dev04"
+        versionCode = 34
+        versionName = "3.0.0-dev05"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
 
@@ -91,8 +91,17 @@ dependencies {
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
 
+    implementation("androidx.room:room-runtime:2.8.5")
+    implementation("androidx.room:room-ktx:2.8.5")
+    ksp("androidx.room:room-compiler:2.8.5")
+
     implementation("com.google.oboe:oboe:1.10.0")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
+}
+
+
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
 }
