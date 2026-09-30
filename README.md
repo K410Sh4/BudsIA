@@ -62,6 +62,9 @@ callback.
 - local Factory vs Candidate A/B audition gate
 - per-environment explicit preference counters
 - no automatic candidate promotion from subjective preference
+- built-in 30-second Device Validation Lab using telemetry only
+- technical checks for native/AI drops, output pressure, route loss, RTF and thermal state
+- validation freezes runtime/profile/policy mutations for internally consistent samples
 
 ## Sample-rate-aware AI
 
@@ -134,11 +137,23 @@ still insufficient, mixed, Factory-preferred or Candidate-preferred. This is an 
 preference summary, not an objective acoustic-quality score, and never promotes the candidate
 automatically.
 
+## Device Validation Lab
+
+The app now contains a short physical-device validation harness. Once a real audio session is
+stable, it collects 30 seconds of existing telemetry in memory and generates a technical
+PASS/WARN/FAIL/UNKNOWN report.
+
+The lab checks the actual native route/sample rate, input and AI-transport drops, output
+pressure, route disconnects, XRuns when available, neural realtime factor and Android
+thermal/performance state. No audio is saved, and the report is explicitly **not** an
+acoustic-quality score.
+
 ## Validation status
 
 CI verifies code, model hashes/sizes, native runtime packaging, unit tests, debug APK and
-release compilation. Physical Galaxy Buds routing, acoustic quality, thermal behavior and
-device-specific latency remain device-validation pending.
+release compilation. The in-app lab provides the next physical-device gate, but actual Galaxy
+Buds routing, acoustic quality, sustained thermals and device-specific latency remain
+unvalidated until the APK is run on the target hardware.
 
 ## Documentation
 
@@ -147,6 +162,7 @@ device-specific latency remain device-validation pending.
 - `docs/ROADMAP.md`
 - `docs/NEURAL_PIPELINE.md`
 - `docs/DEVICE_VALIDATION.md`
+- `docs/DEVICE_VALIDATION_LAB.md`
 - `docs/TECHNOLOGY_BASELINE_2026.md`
 - `docs/adr/0001-native-realtime-core.md`
 - `docs/adr/0002-neural-runtime.md`
@@ -158,5 +174,6 @@ device-specific latency remain device-validation pending.
 - `docs/adr/0006-ai-performance-governor.md`
 - `docs/adr/0007-adpf-performance-hints.md`
 - `docs/adr/0008-local-adaptive-ab-evaluation.md`
+- `docs/adr/0009-device-validation-lab.md`
 - `docs/adr/0005-candidate-adaptive-control.md`
 - `docs/ADAPTIVE_AB_EVALUATION.md`
