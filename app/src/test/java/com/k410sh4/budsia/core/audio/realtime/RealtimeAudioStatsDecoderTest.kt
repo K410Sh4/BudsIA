@@ -55,6 +55,31 @@ class RealtimeAudioStatsDecoderTest {
         assertEquals(listOf(0f, 0.5f, 1f), snapshot.waveform)
     }
 
+    @Test
+    fun decodesAiModeAndTransportCounters() {
+        val stats = LongArray(RealtimeAudioStatsDecoder.STAT_COUNT)
+        stats[0] = 2
+        stats[1] = 48_000
+        stats[23] = 2
+        stats[28] = 19
+        stats[29] = 96_000
+
+        val snapshot = RealtimeAudioStatsDecoder.decode(
+            stats = stats,
+            metrics = FloatArray(
+                RealtimeAudioStatsDecoder.SIGNAL_METRIC_COUNT
+            ),
+            waveform = FloatArray(0)
+        )
+
+        assertEquals(
+            RealtimeProcessingMode.AI,
+            snapshot.processingMode
+        )
+        assertEquals(19L, snapshot.aiInputDroppedSamples)
+        assertEquals(96_000L, snapshot.aiEnhancedSamples)
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun rejectsShortNativeStatsArray() {
         RealtimeAudioStatsDecoder.decode(
